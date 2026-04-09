@@ -68,6 +68,9 @@ export function buildContainsClause(field, value) {
   const clean = sanitizeQueryValue(value);
   if (!clean) return '';
   const terms = clean.split(/\s+/).filter(Boolean);
+  if (terms.length > 1) {
+    return `(${field}:"${clean}" OR ${terms.map((term) => field + ':*' + term + '*').join(' ')})`;
+  }
   return terms.map((term) => field + ':*' + term + '*').join(' ');
 }
 

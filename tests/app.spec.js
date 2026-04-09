@@ -271,7 +271,7 @@ async function mockPokemonApi(page) {
         await route.fulfill({ json: explorerTwoCardsPayload });
         return;
       }
-      if (/rarity:\*rare\*/i.test(query) && /artist:\*ken\*/i.test(query) && /artist:\*sugimori\*/i.test(query)) {
+      if (/rarity:\*rare\*/i.test(query) && (/artist:"ken sugimori"/i.test(query) || (/artist:\*ken\*/i.test(query) && /artist:\*sugimori\*/i.test(query)))) {
         await route.fulfill({ json: { ...explorerRarePageTwoPayload, page: 1, pageCount: 1, totalCount: 1 } });
         return;
       }
