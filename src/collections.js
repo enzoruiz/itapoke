@@ -96,6 +96,20 @@ export async function updateCollectionCardOwnership(collectionId, cardId, owned)
   return payload.collection || null;
 }
 
+export async function addCardToCollection(collectionId, card) {
+  const payload = await apiRequest(`/api/collection-card?collectionId=${encodeURIComponent(collectionId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ card })
+  });
+  if (payload.collection) {
+    collectionsCache = sortCollections([
+      ...collectionsCache.filter((collection) => collection.id !== payload.collection.id),
+      payload.collection
+    ]);
+  }
+  return payload.collection || null;
+}
+
 export function clearCollectionsCache() {
   collectionsCache = [];
 }

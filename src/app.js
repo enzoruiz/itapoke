@@ -2,7 +2,7 @@ import { CARDS_TTL, SEARCH_TTL, SETS_TTL } from './config.js';
 import { fetchCardsForSetFromApi, fetchExplorerPageFromApi, fetchSetsFromApi } from './api.js';
 import { getAuthSession, initializeAuth, mountGoogleAuthButton, setAuthChangeHandler, signOut } from './auth.js';
 import { cacheRead, cacheWrite, isFresh, restoreUiState, saveUiState } from './cache.js';
-import { createCollection, deleteCollection, getCollection, listCollections, renameCollection, updateCollectionCardOwnership } from './collections.js';
+import { addCardToCollection, createCollection, deleteCollection, getCollection, listCollections, renameCollection, updateCollectionCardOwnership } from './collections.js';
 import {
   APP_SHELL,
   buildCardButtonMarkup,
@@ -48,6 +48,8 @@ export function createApp(root) {
     scrollIdleTimer: 0,
     detailRenderToken: 0,
     collectionPromptResolve: null,
+    activeModalCard: null,
+    modalCollectionsToken: 0,
     controllers: { sets: null, explorer: null, setCards: new Map() },
     lazyObserver: null,
     pendingExpansionValue: '',
@@ -129,6 +131,10 @@ export function createApp(root) {
     modalLinks: root.querySelector('#modal-links'),
     modalImage: root.querySelector('#modal-image'),
     modalImageButton: root.querySelector('#modal-image-button'),
+    modalCollectionTools: root.querySelector('#modal-collection-tools'),
+    modalCollectionSelect: root.querySelector('#modal-collection-select'),
+    modalCollectionSubmit: root.querySelector('#modal-collection-submit'),
+    modalCollectionStatus: root.querySelector('#modal-collection-status'),
     collectionNameModal: root.querySelector('#collection-name-modal'),
     collectionNameForm: root.querySelector('#collection-name-form'),
     collectionNameClose: root.querySelector('#collection-name-close'),
@@ -182,6 +188,7 @@ export function createApp(root) {
     renderAuthUi();
     updateCreateCollectionButton();
     updateDetailCreateCollectionButton();
+    if (!el.modal.hidden) void refreshModalCollections({ force: true });
     if (!state.user && state.activeCollectionId) {
       navigateTo('/mis-colecciones', { replace: true });
       return;
@@ -934,6 +941,118 @@ export function createApp(root) {
     });
   }
 
+  function collectionCardExists(collection, cardId) {
+    return Boolean(collection?.cards?.some((entry) => entry.id === cardId));
+  }
+
+  function activeModalCollection() {
+    return state.collections.find((collection) => collection.id === el.modalCollectionSelect.value) || null;
+  }
+
+  function updateModalCollectionUi({ busy = false, status = '' } = {}) {
+    const card = state.activeModalCard;
+    if (!state.user) {
+      el.modalCollectionSelect.disabled = true;
+      el.modalCollectionSubmit.disabled = true;
+      el.modalCollectionSubmit.textContent = 'Agregar a coleccion';
+      el.modalCollectionStatus.textContent = 'Inicia sesion para guardar esta carta en una coleccion existente.';
+      return;
+    }
+    if (busy && !state.collections.length) {
+      el.modalCollectionSelect.disabled = true;
+      el.modalCollectionSubmit.disabled = true;
+      el.modalCollectionSubmit.textContent = 'Agregar a coleccion';
+      el.modalCollectionStatus.textContent = status || 'Cargando tus colecciones...';
+      return;
+    }
+    if (!state.collections.length) {
+      el.modalCollectionSelect.innerHTML = '<option value="">No tienes colecciones</option>';
+      el.modalCollectionSelect.disabled = true;
+      el.modalCollectionSubmit.disabled = true;
+      el.modalCollectionSubmit.textContent = 'Agregar a coleccion';
+      el.modalCollectionStatus.textContent = status || 'Primero crea una coleccion desde el explorador o desde una expansion.';
+      return;
+    }
+
+    const collection = activeModalCollection();
+    const alreadyAdded = collectionCardExists(collection, card?.id);
+    el.modalCollectionSelect.disabled = busy;
+    el.modalCollectionSubmit.disabled = busy || !collection || !card || alreadyAdded;
+    el.modalCollectionSubmit.textContent = busy ? 'Agregando...' : (alreadyAdded ? 'Ya agregada' : 'Agregar a coleccion');
+    el.modalCollectionStatus.textContent = status || (alreadyAdded
+      ? `La carta ya esta en "${collection.name}".`
+      : collection
+        ? `La carta se agregara a "${collection.name}" como pendiente.`
+        : 'Selecciona una coleccion para guardar esta carta.');
+  }
+
+  function populateModalCollections() {
+    if (!state.user || !state.collections.length) {
+      updateModalCollectionUi();
+      return;
+    }
+    const previousValue = el.modalCollectionSelect.value;
+    el.modalCollectionSelect.innerHTML = state.collections
+      .map((collection) => `<option value="${escapeHtml(collection.id)}">${escapeHtml(collection.name)}</option>`)
+      .join('');
+    const nextValue = state.collections.some((collection) => collection.id === previousValue)
+      ? previousValue
+      : state.collections.find((collection) => !collectionCardExists(collection, state.activeModalCard?.id))?.id || state.collections[0]?.id || '';
+    el.modalCollectionSelect.value = nextValue;
+    updateModalCollectionUi();
+  }
+
+  async function refreshModalCollections({ force = false } = {}) {
+    if (!state.activeModalCard) return;
+    if (!state.user) {
+      updateModalCollectionUi();
+      return;
+    }
+    const token = state.modalCollectionsToken + 1;
+    state.modalCollectionsToken = token;
+    el.modalCollectionSelect.innerHTML = '<option value="">Cargando colecciones...</option>';
+    el.modalCollectionSelect.disabled = true;
+    updateModalCollectionUi({ busy: true, status: 'Cargando tus colecciones...' });
+    try {
+      state.collections = await listCollections({ force });
+      if (token !== state.modalCollectionsToken || !state.activeModalCard) return;
+      populateModalCollections();
+    } catch (error) {
+      if (token !== state.modalCollectionsToken || !state.activeModalCard) return;
+      el.modalCollectionSelect.innerHTML = '<option value="">No disponible</option>';
+      el.modalCollectionSelect.disabled = true;
+      updateModalCollectionUi({ status: 'No se pudieron cargar tus colecciones ahora mismo.' });
+      console.error(error);
+    }
+  }
+
+  async function handleAddModalCardToCollection() {
+    const card = state.activeModalCard;
+    const collection = activeModalCollection();
+    if (!card || !collection || collectionCardExists(collection, card.id)) {
+      updateModalCollectionUi();
+      return;
+    }
+    updateModalCollectionUi({ busy: true, status: `Agregando la carta a "${collection.name}"...` });
+    try {
+      const updatedCollection = await addCardToCollection(collection.id, normalizeCollectionCards([card])[0]);
+      if (!updatedCollection) throw new Error('Collection update failed');
+      state.collections = await listCollections();
+      updateModalCollectionUi({ status: `Carta agregada a "${updatedCollection.name}".` });
+      if (state.activeCollectionId === updatedCollection.id && !el.collectionDetail.hidden) await renderCollectionDetail();
+      if (!el.collectionsShell.hidden) void renderCollectionsList();
+    } catch (error) {
+      if (error?.status === 409) {
+        state.collections = await listCollections({ force: true });
+        populateModalCollections();
+        updateModalCollectionUi({ status: `La carta ya estaba guardada en "${activeModalCollection()?.name || collection.name}".` });
+        return;
+      }
+      updateModalCollectionUi({ status: 'No se pudo agregar la carta a esta coleccion.' });
+      console.error(error);
+    }
+  }
+
   function collectionFiltersSummary() {
     const filters = currentFilters();
     return {
@@ -1197,6 +1316,7 @@ export function createApp(root) {
     const card = findCard(setId, cardId);
     if (!set || !card) return;
     state.activeTrigger = trigger || null;
+    state.activeModalCard = enrichCard(card);
     el.modalTitle.textContent = card.name;
     el.modalSubtitle.textContent = `${set.displayName} (${set.code}) - #${card.number}`;
     el.modalImage.src = card.imageLarge || card.imageSmall;
@@ -1218,16 +1338,22 @@ export function createApp(root) {
     if (card.tcgplayerUrl) links.push(`<a class="secondary" href="${escapeHtml(card.tcgplayerUrl)}" target="_blank" rel="noreferrer">Ver en TCGplayer</a>`);
     if (card.cardmarketUrl) links.push(`<a class="secondary" href="${escapeHtml(card.cardmarketUrl)}" target="_blank" rel="noreferrer">Ver en Cardmarket</a>`);
     el.modalLinks.innerHTML = links.join('');
+    el.modalCollectionTools.hidden = false;
+    el.modalCollectionSelect.innerHTML = '<option value="">Selecciona una coleccion</option>';
+    updateModalCollectionUi();
     el.modal.hidden = false;
     document.body.style.overflow = 'hidden';
     setZoom(false);
     el.modalClose.focus();
+    void refreshModalCollections({ force: true });
   }
 
   function closeModal() {
     el.modal.hidden = true;
     document.body.style.overflow = '';
     setZoom(false);
+    state.activeModalCard = null;
+    state.modalCollectionsToken += 1;
     state.activeTrigger?.focus();
   }
 
@@ -1338,6 +1464,8 @@ export function createApp(root) {
   });
   el.modalImageButton.addEventListener('click', (event) => setZoom(!state.zoomActive, event));
   el.modalImageButton.addEventListener('pointermove', updateZoomOriginFromPointer);
+  el.modalCollectionSelect.addEventListener('change', () => updateModalCollectionUi());
+  el.modalCollectionSubmit.addEventListener('click', () => { void handleAddModalCardToCollection(); });
   el.modalImageButton.addEventListener('wheel', (event) => {
     if (!state.zoomActive) return;
     event.preventDefault();

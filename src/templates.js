@@ -170,6 +170,16 @@ export const APP_SHELL = `
             <p id="modal-subtitle" class="subtitle"></p>
             <div class="modal-meta" id="modal-meta"></div>
             <div class="modal-links" id="modal-links"></div>
+            <div class="modal-collection-tools" id="modal-collection-tools">
+              <label for="modal-collection-select">
+                Agregar a una coleccion
+                <select id="modal-collection-select">
+                  <option value="">Selecciona una coleccion</option>
+                </select>
+              </label>
+              <button class="action-btn accent" id="modal-collection-submit" type="button">Agregar a coleccion</button>
+              <p class="subtitle modal-collection-status" id="modal-collection-status"></p>
+            </div>
           </div>
         </div>
       </article>

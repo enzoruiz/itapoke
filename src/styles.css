@@ -1505,6 +1505,20 @@ h2 {
   height: 56px;
 }
 
+.modal-collection-tools {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(65, 83, 120, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.modal-collection-status {
+  margin: 0;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1648,6 +1662,47 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .modal-frame,
+  .prompt-modal-frame {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+
+  .modal-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modal-close,
+  .modal-links a,
+  .modal-collection-tools .action-btn {
+    width: 100%;
+  }
+
+  .modal-image-wrap {
+    position: static;
+    top: auto;
+    padding: 12px;
+  }
+
+  .modal-image {
+    border-radius: 18px;
+  }
+
+  .modal-links,
+  .modal-collection-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-collection-tools {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .modal-collection-tools label {
+    min-width: 0;
+  }
+
   .collection-entry {
     grid-template-columns: 1fr;
     row-gap: 18px;
@@ -1693,5 +1748,35 @@ h2 {
 
   .modal {
     padding: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .modal {
+    padding: 8px;
+  }
+
+  .modal-card,
+  .prompt-modal-card {
+    padding: 14px;
+  }
+
+  .modal-grid {
+    gap: 14px;
+  }
+
+  .modal-image-wrap,
+  .modal-collection-tools {
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  #modal-subtitle {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+    min-height: auto;
+    padding: 10px 12px;
   }
 }

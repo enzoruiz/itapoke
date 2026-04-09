@@ -244,6 +244,30 @@ async function mockBackendApi(page) {
       return;
     }
 
+    if (url.pathname === '/api/collection-card' && request.method() === 'POST') {
+      const collectionId = url.searchParams.get('collectionId') || '';
+      const body = parseJsonBody(route);
+      const card = body.card || null;
+      const collection = state.collections.find((entry) => entry.id === collectionId);
+      if (!collection) {
+        await route.fulfill({ status: 404, json: { error: 'Collection not found.' } });
+        return;
+      }
+      if (collection.cards.some((entry) => entry.id === card?.id)) {
+        await route.fulfill({ status: 409, json: { error: 'Collection card already exists.' } });
+        return;
+      }
+      const updatedCollection = {
+        ...collection,
+        updatedAt: nowIso(),
+        totalCount: Number(collection.totalCount || collection.cards.length) + 1,
+        cards: [...collection.cards, card]
+      };
+      state.collections = sortedCollections(state.collections.map((entry) => entry.id === collectionId ? updatedCollection : entry));
+      await route.fulfill({ json: { collection: updatedCollection } });
+      return;
+    }
+
     await route.fallback();
   });
 }
@@ -482,6 +506,39 @@ test('creates a collection from expansion detail filters', async ({ page }) => {
   await expect(page.locator('#collection-summary')).toContainText('Floragato set');
   await expect(page.locator('.collection-entry')).toHaveCount(1);
   await expect(page.locator('#collection-summary')).toContainText('Buscar: Floragato');
+});
+
+test('adds a card to an existing collection from the card modal', async ({ page }) => {
+  await signInAsTestUser(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /biblioteca de expansiones/i }).click();
+  await page.locator('.expansion-card').first().click();
+  await page.locator('#detail-search').fill('Floragato');
+  await expect(page.locator('#expansion-cards .poster-item')).toHaveCount(1);
+  await page.locator('#detail-create-collection').click();
+  await page.locator('#collection-name-input').fill('Mi set de Floragato');
+  await page.locator('#collection-name-submit').click();
+  await expect(page.locator('#collection-summary')).toContainText('Mi set de Floragato');
+
+  await page.goto('/library');
+  await page.locator('.expansion-card').first().click();
+  await page.locator('#detail-search').fill('');
+  await expect(page.locator('#expansion-cards .poster-item')).toHaveCount(2);
+  await page.locator('.poster-item').first().click();
+
+  await expect(page.locator('#card-modal')).toBeVisible();
+  await expect(page.locator('#modal-collection-select')).toHaveValue(/mi-set-de-floragato-/);
+  await expect(page.locator('#modal-collection-submit')).toBeEnabled();
+  await page.locator('#modal-collection-submit').click();
+  await expect(page.locator('#modal-collection-status')).toContainText('Carta agregada');
+  await expect(page.locator('#modal-collection-submit')).toBeDisabled();
+
+  await page.locator('#modal-close').click();
+  await page.goto('/mis-colecciones');
+  await page.getByRole('button', { name: /ver detalle/i }).click();
+  await expect(page.locator('.collection-entry')).toHaveCount(2);
+  await expect(page.locator('#collection-cards')).toContainText('Sprigatito');
+  await expect(page.locator('#collection-cards')).toContainText('Floragato');
 });
 
 test('opens Mis Colecciones from the main screen', async ({ page }) => {
