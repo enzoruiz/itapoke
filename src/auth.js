@@ -126,15 +126,18 @@ export function mountGoogleAuthButton(container, label = 'Iniciar con Google') {
     return;
   }
   container.innerHTML = '';
-  const launch = document.createElement('button');
-  launch.type = 'button';
-  launch.className = 'action-btn primary auth-google-launch';
-  launch.textContent = label;
-  launch.addEventListener('click', async () => {
-    launch.disabled = true;
-    launch.textContent = 'Cargando Google...';
-    try {
-      const google = await ensureGoogleInitialized();
+
+  const placeholder = document.createElement('div');
+  placeholder.className = 'auth-google-placeholder';
+  placeholder.textContent = 'Cargando Google...';
+  container.appendChild(placeholder);
+
+  void ensureGoogleInitialized()
+    .then((google) => {
+      if (getAuthSession()) {
+        container.innerHTML = '';
+        return;
+      }
       container.innerHTML = '';
       google.accounts.id.renderButton(container, {
         theme: 'outline',
@@ -144,10 +147,14 @@ export function mountGoogleAuthButton(container, label = 'Iniciar con Google') {
         logo_alignment: 'left',
         width: 260
       });
-    } catch {
-      launch.disabled = false;
-      launch.textContent = 'Reintentar con Google';
-    }
-  });
-  container.appendChild(launch);
+    })
+    .catch(() => {
+      container.innerHTML = '';
+      const fallback = document.createElement('button');
+      fallback.type = 'button';
+      fallback.className = 'action-btn primary auth-google-launch';
+      fallback.textContent = label;
+      fallback.addEventListener('click', () => mountGoogleAuthButton(container, label), { once: true });
+      container.appendChild(fallback);
+    });
 }

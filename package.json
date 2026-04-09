@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node scripts/local-api-server.mjs",
+    "dev:local": "concurrently \"npm run dev:api\" \"npm run dev\"",
+    "dev:vercel": "vercel dev --listen 3000",
     "build": "vite build",
     "preview": "vite preview",
     "preview:test": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
@@ -18,10 +21,13 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.59.1",
     "chrome-launcher": "^1.2.1",
+    "concurrently": "^9.2.1",
+    "dotenv": "^16.6.1",
     "eslint": "^10.2.0",
     "globals": "^17.4.0",
     "lighthouse": "^13.0.3",
     "start-server-and-test": "^3.0.0",
+    "vercel": "^41.7.3",
     "vite": "^7.1.9"
   },
   "dependencies": {

@@ -154,11 +154,18 @@ export function createApp(root) {
   function renderAuthUi() {
     if (state.user) {
       const label = state.user.name || state.user.email || 'Usuario';
-      el.authCopy.textContent = `Sesion iniciada como ${label}. Tus colecciones quedan separadas por cuenta.`;
-      el.authControls.innerHTML = '<button class="action-btn" id="auth-logout" type="button">Cerrar sesion</button>';
+      el.authBar.classList.remove('auth-bar-guest');
+      el.authBar.classList.add('auth-bar-user');
+      const avatar = state.user.picture
+        ? `<img class="auth-avatar" src="${escapeHtml(state.user.picture)}" alt="Avatar de ${escapeHtml(label)}" referrerpolicy="no-referrer" />`
+        : `<span class="auth-avatar auth-avatar-fallback" aria-hidden="true">${escapeHtml(label.trim().charAt(0).toUpperCase() || 'U')}</span>`;
+      el.authCopy.innerHTML = `${avatar}<strong class="auth-name">${escapeHtml(label)}</strong>`;
+      el.authControls.innerHTML = '<button class="auth-logout-btn" id="auth-logout" type="button" aria-label="Cerrar sesion" title="Cerrar sesion"><span class="auth-logout-glyph" aria-hidden="true">x</span></button>';
       return;
     }
-    el.authCopy.textContent = 'Inicia sesion con Google para guardar y ver tus colecciones personales.';
+    el.authBar.classList.remove('auth-bar-user');
+    el.authBar.classList.add('auth-bar-guest');
+    el.authCopy.textContent = '';
     el.authControls.innerHTML = '<div id="auth-google-button"></div>';
     mountGoogleAuthButton(el.authControls.querySelector('#auth-google-button'));
   }

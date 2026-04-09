@@ -3,10 +3,7 @@ import { escapeHtml } from './utils.js';
 export const APP_SHELL = `
   <main class="shell">
     <section class="auth-bar" id="auth-bar">
-      <div>
-        <p class="eyebrow">Cuenta</p>
-        <div class="subtitle" id="auth-copy">Inicia sesion con Google para guardar colecciones por usuario.</div>
-      </div>
+      <div class="auth-copy" id="auth-copy">Inicia sesion con Google</div>
       <div class="auth-controls" id="auth-controls"></div>
     </section>
 
