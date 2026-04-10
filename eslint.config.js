@@ -7,10 +7,15 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ['src/**/*.js', 'api/**/*.js', 'public/sw.js', 'playwright.config.js', 'tests/**/*.js', 'scripts/**/*.mjs'],
+    files: ['src/**/*.{js,jsx}', 'api/**/*.js', 'public/sw.js', 'playwright.config.js', 'tests/**/*.js', 'scripts/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true
+        }
+      },
       globals: {
         ...globals.browser,
         ...globals.node

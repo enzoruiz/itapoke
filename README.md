@@ -4,7 +4,7 @@ Aplicacion web para explorar expansiones y cartas de Pokemon TCG, con busqueda e
 
 ## Descripcion del proyecto
 
-Itapoke combina un frontend en `Vite` con una capa de API serverless compatible con `Vercel`.
+Itapoke combina un frontend en `React` sobre `Vite` con una capa de API serverless compatible con `Vercel`.
 
 La app consume datos de `pokemontcg.io`, permite navegar por expansiones oficiales, abrir el detalle completo de cada set, buscar cartas con filtros combinables y guardar colecciones propias usando autenticacion con Google y persistencia en MongoDB.
 
@@ -25,6 +25,8 @@ La app consume datos de `pokemontcg.io`, permite navegar por expansiones oficial
 
 ## Stack
 
+- `React`
+- `React DOM`
 - `Vite`
 - JavaScript ES Modules
 - `Vercel` Functions
@@ -36,7 +38,7 @@ La app consume datos de `pokemontcg.io`, permite navegar por expansiones oficial
 
 ## Estructura principal
 
-- `src/`: interfaz cliente, rutas, filtros, modales, auth y consumo de API.
+- `src/`: interfaz React, rutas cliente, filtros, modales, auth y consumo de API.
 - `api/`: endpoints serverless para autenticacion, sesion y colecciones.
 - `public/`: assets publicos y service worker.
 - `reports/lighthouse/`: reportes de auditoria.
@@ -76,7 +78,7 @@ El frontend usa Vite y redirige `/api/*` al servidor local en `3001`.
 
 ## Scripts
 
-- `npm run dev`: frontend Vite.
+- `npm run dev`: frontend React con Vite.
 - `npm run dev:api`: API local para desarrollo.
 - `npm run dev:local`: frontend y API local en paralelo.
 - `npm run dev:vercel`: entorno local con `vercel dev`.

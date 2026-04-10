@@ -1,6 +1,17 @@
 import { API_BASE, CARD_FIELDS, PAGE_SIZE, SET_FIELDS } from './config.js';
 import { normalizeCard, normalizeSet, isIncludedExpansion, compareCardNumbers, buildContainsClause, sanitizeQueryValue } from './utils.js';
 
+function buildExplorerClauses(filters) {
+  const clauses = [];
+  if (filters.cardQuery.trim()) clauses.push(buildContainsClause('name', filters.cardQuery));
+  if (filters.expansion) clauses.push(`set.id:${filters.expansion}`);
+  if (filters.artist.trim()) clauses.push(buildContainsClause('artist', filters.artist));
+  if (filters.cardKind) clauses.push(`supertype:${sanitizeQueryValue(filters.cardKind)}`);
+  if (filters.element) clauses.push(`types:${sanitizeQueryValue(filters.element)}`);
+  if (filters.rarity.trim()) clauses.push(buildContainsClause('rarity', filters.rarity));
+  return clauses.filter(Boolean);
+}
+
 export async function fetchJson(url, { signal } = {}) {
   const response = await fetch(url, { signal, headers: { 'User-Agent': 'OpenCode Pokemon TCG Browser' } });
   if (!response.ok) throw new Error('Request failed (' + response.status + ') for ' + url);
@@ -36,23 +47,40 @@ export async function fetchCardsForSetFromApi(setId, signal) {
 }
 
 export async function fetchExplorerPageFromApi(filters, setLookup, page, signal) {
-  const clauses = [];
-  if (filters.cardQuery.trim()) clauses.push(buildContainsClause('name', filters.cardQuery));
-  if (filters.expansion) clauses.push(`set.id:${filters.expansion}`);
-  if (filters.artist.trim()) clauses.push(buildContainsClause('artist', filters.artist));
-  if (filters.cardKind) clauses.push(`supertype:${sanitizeQueryValue(filters.cardKind)}`);
-  if (filters.element) clauses.push(`types:${sanitizeQueryValue(filters.element)}`);
-  if (filters.rarity.trim()) clauses.push(buildContainsClause('rarity', filters.rarity));
+  const clauses = buildExplorerClauses(filters);
   if (!clauses.length) return null;
 
-  const query = clauses.join(' ');
-  const filteredCards = [];
+  const params = new URLSearchParams({
+    q: clauses.join(' '),
+    orderBy: 'set.releaseDate,name',
+    page: String(Math.max(page, 1)),
+    pageSize: String(PAGE_SIZE),
+    select: CARD_FIELDS
+  });
+  const json = await fetchJson(`${API_BASE}/cards?${params.toString()}`, { signal });
+  const cards = (json.data || []).map(normalizeCard).filter((card) => setLookup.has(card.setId));
+  const pageCount = json.pageCount || Math.max(1, Math.ceil((json.totalCount || json.count || 0) / (json.pageSize || PAGE_SIZE)));
+  const safePage = Math.min(Math.max(page, 1), pageCount);
+
+  return {
+    cards,
+    page: safePage,
+    pageCount,
+    totalCount: json.totalCount || json.count || cards.length
+  };
+}
+
+export async function fetchAllExplorerCardsFromApi(filters, setLookup, signal) {
+  const clauses = buildExplorerClauses(filters);
+  if (!clauses.length) return [];
+
+  const cards = [];
   let apiPage = 1;
   let apiPageCount = 1;
 
   while (apiPage <= apiPageCount) {
     const params = new URLSearchParams({
-      q: query,
+      q: clauses.join(' '),
       orderBy: 'set.releaseDate,name',
       page: String(apiPage),
       pageSize: String(PAGE_SIZE),
@@ -60,20 +88,9 @@ export async function fetchExplorerPageFromApi(filters, setLookup, page, signal)
     });
     const json = await fetchJson(`${API_BASE}/cards?${params.toString()}`, { signal });
     apiPageCount = json.pageCount || Math.max(1, Math.ceil((json.totalCount || json.count || 0) / (json.pageSize || PAGE_SIZE)));
-    filteredCards.push(...json.data.map(normalizeCard).filter((card) => setLookup.has(card.setId)));
+    cards.push(...(json.data || []).map(normalizeCard).filter((card) => setLookup.has(card.setId)));
     apiPage += 1;
   }
 
-  const totalCount = filteredCards.length;
-  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const safePage = Math.min(Math.max(page, 1), pageCount);
-  const start = (safePage - 1) * PAGE_SIZE;
-  const cards = filteredCards.slice(start, start + PAGE_SIZE);
-
-  return {
-    cards,
-    page: safePage,
-    pageCount,
-    totalCount
-  };
+  return cards;
 }
