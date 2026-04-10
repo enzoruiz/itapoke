@@ -3,6 +3,12 @@ import { fetchCardsForSetFromApi, fetchExplorerPageFromApi, fetchSetsFromApi } f
 import { getAuthSession, initializeAuth, mountGoogleAuthButton, setAuthChangeHandler, signOut } from './auth.js';
 import { cacheRead, cacheWrite, isFresh, restoreUiState, saveUiState } from './cache.js';
 import { addCardToCollection, createCollection, deleteCollection, getCollection, listCollections, removeCardFromCollection, renameCollection, updateCollectionCardOwnership } from './collections.js';
+import { collectionCardExists, collectionFiltersSummary, collectionNameFromFilters, detailCollectionFiltersSummary, detailCollectionName, filterCollectionCards, normalizeCollectionCards } from './app-collections.js';
+import { buildExplorerCacheKey, buildSeriesEntries, compareSetsByNewest, enrichCardWithSet, seriesAnchorId } from './app-data.js';
+import { bindAppEvents } from './app-events.js';
+import { bootstrapApp, collectAppElements, createInitialState } from './app-init.js';
+import { createCardModalController } from './app-modal.js';
+import { buildRelativeUrl, collectionPath, expansionPath, routeCollectionId, routeScreen, routeSetId } from './app-routing.js';
 import {
   APP_SHELL,
   buildCardButtonMarkup,
@@ -21,148 +27,8 @@ import { debounce, escapeHtml } from './utils.js';
 export function createApp(root) {
   root.innerHTML = APP_SHELL;
 
-  const state = {
-    sets: [],
-    filteredSets: [],
-    seriesEntries: [],
-    seriesPage: 1,
-    homeMode: 'library',
-    user: getAuthSession(),
-    collections: [],
-    setLookup: new Map(),
-    cardsBySet: new Map(),
-    explorerCards: [],
-    explorerPage: 1,
-    explorerTotalPages: 1,
-    explorerTotalCount: 0,
-    zoomActive: false,
-    zoomScale: 2.2,
-    zoomOriginX: 50,
-    zoomOriginY: 50,
-    zoomRaf: 0,
-    activeTrigger: null,
-    prefetchedLargeImages: new Set(),
-    hoverPrefetchTimer: 0,
-    pendingPrefetchKey: '',
-    isScrollActive: false,
-    scrollIdleTimer: 0,
-    detailRenderToken: 0,
-    collectionPromptResolve: null,
-    collectionDeleteResolve: null,
-    collectionCardRemoveResolve: null,
-    activeModalCard: null,
-    modalCollectionsToken: 0,
-    controllers: { sets: null, explorer: null, setCards: new Map() },
-    lazyObserver: null,
-    pendingExpansionValue: '',
-    activeSetId: '',
-    activeCollectionId: '',
-    collectionOwnershipFilter: 'all',
-    detailQuery: '',
-    detailKind: '',
-    detailSort: 'number-asc'
-  };
-
-  const el = {
-    modeShell: root.querySelector('#mode-shell'),
-    authBar: root.querySelector('#auth-bar'),
-    authCopy: root.querySelector('#auth-copy'),
-    authControls: root.querySelector('#auth-controls'),
-    modeCaption: root.querySelector('#mode-caption'),
-    modeExplorerButton: root.querySelector('#mode-explorer'),
-    modeLibraryButton: root.querySelector('#mode-library'),
-    modeCollectionsButton: root.querySelector('#mode-collections'),
-    notFoundShell: root.querySelector('#not-found-shell'),
-    notFoundHome: root.querySelector('#not-found-home'),
-    notFoundLibrary: root.querySelector('#not-found-library'),
-    explorerPanel: root.querySelector('#explorer-panel'),
-    explorerHome: root.querySelector('#explorer-home'),
-    cardQueryInput: root.querySelector('#card-query'),
-    expansionFilter: root.querySelector('#expansion-filter'),
-    artistFilter: root.querySelector('#artist-filter'),
-    cardKindFilter: root.querySelector('#card-kind-filter'),
-    elementFilter: root.querySelector('#element-filter'),
-    rarityFilter: root.querySelector('#rarity-filter'),
-    runFiltersButton: root.querySelector('#run-filters'),
-    createCollectionButton: root.querySelector('#create-collection'),
-    clearFiltersButton: root.querySelector('#clear-filters'),
-    explorerStatus: root.querySelector('#explorer-status'),
-    explorerResults: root.querySelector('#explorer-results'),
-    explorerPager: root.querySelector('#explorer-pager'),
-    explorerPageLabel: root.querySelector('#explorer-page-label'),
-    explorerPrev: root.querySelector('#explorer-prev'),
-    explorerNext: root.querySelector('#explorer-next'),
-    libraryShell: root.querySelector('#library-shell'),
-    libraryHome: root.querySelector('#library-home'),
-    seriesPager: root.querySelector('#series-pager'),
-    seriesPrev: root.querySelector('#series-prev'),
-    seriesNext: root.querySelector('#series-next'),
-    seriesPageLabel: root.querySelector('#series-page-label'),
-    seriesList: root.querySelector('#series-list'),
-    expansionDetail: root.querySelector('#expansion-detail'),
-    detailBack: root.querySelector('#detail-back'),
-    expansionSummary: root.querySelector('#expansion-summary'),
-    detailSearch: root.querySelector('#detail-search'),
-    detailKindFilter: root.querySelector('#detail-kind-filter'),
-    detailSortFilter: root.querySelector('#detail-sort-filter'),
-    detailCreateCollectionButton: root.querySelector('#detail-create-collection'),
-    expansionCardsStatus: root.querySelector('#expansion-cards-status'),
-    expansionCards: root.querySelector('#expansion-cards'),
-    collectionsShell: root.querySelector('#collections-shell'),
-    collectionsHome: root.querySelector('#collections-home'),
-    collectionsStatus: root.querySelector('#collections-status'),
-    collectionsList: root.querySelector('#collections-list'),
-    collectionDetail: root.querySelector('#collection-detail'),
-    collectionBack: root.querySelector('#collection-back'),
-    collectionRename: root.querySelector('#collection-rename'),
-    collectionDelete: root.querySelector('#collection-delete'),
-    collectionOwnershipFilters: root.querySelector('#collection-ownership-filters'),
-    collectionFilterAll: root.querySelector('#collection-filter-all'),
-    collectionFilterOwned: root.querySelector('#collection-filter-owned'),
-    collectionFilterMissing: root.querySelector('#collection-filter-missing'),
-    collectionSummary: root.querySelector('#collection-summary'),
-    collectionCardsStatus: root.querySelector('#collection-cards-status'),
-    collectionCards: root.querySelector('#collection-cards'),
-    status: root.querySelector('#status'),
-    topStats: root.querySelector('#top-stats'),
-    modal: root.querySelector('#card-modal'),
-    modalClose: root.querySelector('#modal-close'),
-    modalTitle: root.querySelector('#modal-title'),
-    modalSubtitle: root.querySelector('#modal-subtitle'),
-    modalMeta: root.querySelector('#modal-meta'),
-    modalLinks: root.querySelector('#modal-links'),
-    modalImage: root.querySelector('#modal-image'),
-    modalImageButton: root.querySelector('#modal-image-button'),
-    modalCollectionTools: root.querySelector('#modal-collection-tools'),
-    modalCollectionSelect: root.querySelector('#modal-collection-select'),
-    modalCollectionSubmit: root.querySelector('#modal-collection-submit'),
-    modalCollectionStatus: root.querySelector('#modal-collection-status'),
-    collectionNameModal: root.querySelector('#collection-name-modal'),
-    collectionNameForm: root.querySelector('#collection-name-form'),
-    collectionNameClose: root.querySelector('#collection-name-close'),
-    collectionNameKicker: root.querySelector('#collection-name-kicker'),
-    collectionNameTitle: root.querySelector('#collection-name-title'),
-    collectionNameCopy: root.querySelector('#collection-name-copy'),
-    collectionNameInput: root.querySelector('#collection-name-input'),
-    collectionNameCancel: root.querySelector('#collection-name-cancel'),
-    collectionNameSubmit: root.querySelector('#collection-name-submit'),
-    collectionDeleteModal: root.querySelector('#collection-delete-modal'),
-    collectionDeleteClose: root.querySelector('#collection-delete-close'),
-    collectionDeleteKicker: root.querySelector('#collection-delete-kicker'),
-    collectionDeleteTitle: root.querySelector('#collection-delete-title'),
-    collectionDeleteCopy: root.querySelector('#collection-delete-copy'),
-    collectionDeleteName: root.querySelector('#collection-delete-name'),
-    collectionDeleteCancel: root.querySelector('#collection-delete-cancel'),
-    collectionDeleteConfirm: root.querySelector('#collection-delete-confirm'),
-    collectionCardRemoveModal: root.querySelector('#collection-card-remove-modal'),
-    collectionCardRemoveClose: root.querySelector('#collection-card-remove-close'),
-    collectionCardRemoveKicker: root.querySelector('#collection-card-remove-kicker'),
-    collectionCardRemoveTitle: root.querySelector('#collection-card-remove-title'),
-    collectionCardRemoveCopy: root.querySelector('#collection-card-remove-copy'),
-    collectionCardRemoveName: root.querySelector('#collection-card-remove-name'),
-    collectionCardRemoveCancel: root.querySelector('#collection-card-remove-cancel'),
-    collectionCardRemoveConfirm: root.querySelector('#collection-card-remove-confirm')
-  };
+  const state = createInitialState(getAuthSession());
+  const el = collectAppElements(root);
 
   function currentFilters() {
     return {
@@ -217,8 +83,6 @@ export function createApp(root) {
   function persistUiState() {
     saveUiState({
       homeMode: state.homeMode,
-      ...currentFilters(),
-      explorerPage: state.explorerPage,
       activeSetId: state.activeSetId,
       detailQuery: state.detailQuery,
       detailKind: state.detailKind,
@@ -231,13 +95,6 @@ export function createApp(root) {
     const data = restoreUiState();
     if (!data) return;
     state.homeMode = data.homeMode === 'explorer' ? 'explorer' : 'library';
-    el.cardQueryInput.value = data.cardQuery || '';
-    el.artistFilter.value = data.artist || '';
-    el.cardKindFilter.value = data.cardKind || '';
-    el.elementFilter.value = data.element || '';
-    el.rarityFilter.value = data.rarity || '';
-    state.explorerPage = Number(data.explorerPage) > 0 ? Number(data.explorerPage) : 1;
-    state.pendingExpansionValue = data.expansion || '';
     state.activeSetId = data.activeSetId || '';
     state.detailQuery = data.detailQuery || '';
     state.detailKind = data.detailKind || '';
@@ -252,26 +109,8 @@ export function createApp(root) {
     return state.setLookup.get(setId) || null;
   }
 
-  function getCardBits(card) {
-    const bits = [card.supertype];
-    if (card.subtypes.length) bits.push(card.subtypes.join(', '));
-    if (card.types.length) bits.push(card.types.join(', '));
-    if (card.rarity) bits.push(card.rarity);
-    if (card.artist) bits.push('Artista: ' + card.artist);
-    return bits.filter(Boolean);
-  }
-
   function enrichCard(card) {
-    const set = getSetById(card.setId);
-    const setLabel = set ? `${set.displayName} (${set.code})` : (card.setName || 'Set desconocido');
-    return {
-      ...card,
-      bits: getCardBits(card),
-      setLabel,
-      setLogo: set?.logo || '',
-      setSymbol: set?.symbol || '',
-      setCode: set?.code || ''
-    };
+    return enrichCardWithSet(card, getSetById(card.setId));
   }
 
   function getCardListClass() {
@@ -301,27 +140,6 @@ export function createApp(root) {
     state.homeMode = ['explorer', 'collections'].includes(mode) ? mode : 'library';
     updateHomeModeUi();
     if (persist) persistUiState();
-  }
-
-  function normalizePathname(pathname = window.location.pathname) {
-    if (!pathname || pathname === '/') return '/';
-    return pathname.endsWith('/') ? pathname.slice(0, -1) || '/' : pathname;
-  }
-
-  function buildRelativeUrl(path, query) {
-    const pathname = normalizePathname(path);
-    const search = query ? new URLSearchParams(query).toString() : '';
-    return search ? `${pathname}?${search}` : pathname;
-  }
-
-  function routeScreen() {
-    const pathname = normalizePathname();
-    if (pathname === '/') return 'landing';
-    if (pathname === '/explorer' || pathname.startsWith('/explorer/')) return 'explorer';
-    if (pathname === '/library' || pathname.startsWith('/library/')) return 'library';
-    if (pathname.startsWith('/expansion/')) return 'expansion';
-    if (pathname === '/mis-colecciones' || pathname.startsWith('/mis-colecciones/')) return 'collections';
-    return 'not-found';
   }
 
   function navigateTo(path, { replace = false, query = null } = {}) {
@@ -361,6 +179,24 @@ export function createApp(root) {
     state.pendingExpansionValue = params.get('expansion') || '';
   }
 
+  function resetExplorerState() {
+    el.cardQueryInput.value = '';
+    el.expansionFilter.value = '';
+    el.artistFilter.value = '';
+    el.cardKindFilter.value = '';
+    el.elementFilter.value = '';
+    el.rarityFilter.value = '';
+    state.pendingExpansionValue = '';
+    state.explorerCards = [];
+    state.explorerPage = 1;
+    state.explorerTotalPages = 1;
+    state.explorerTotalCount = 0;
+    el.explorerStatus.textContent = 'Elige uno o mas filtros para buscar cartas entre las expansiones incluidas.';
+    el.explorerResults.innerHTML = '<div class="empty">Todavia no hiciste una busqueda en vivo.</div>';
+    el.explorerPager.hidden = true;
+    updateCreateCollectionButton();
+  }
+
   function syncExplorerRoute(page = state.explorerPage || 1, { replace = false } = {}) {
     navigateTo('/explorer', { replace, query: explorerQueryFromUi(page) });
   }
@@ -381,20 +217,6 @@ export function createApp(root) {
     el.detailSearch.value = state.detailQuery;
     el.detailKindFilter.value = state.detailKind;
     el.detailSortFilter.value = state.detailSort;
-  }
-
-  function routeCollectionId() {
-    const pathname = normalizePathname();
-    if (!pathname.startsWith('/mis-colecciones/')) return '';
-    try {
-      return decodeURIComponent(pathname.slice('/mis-colecciones/'.length));
-    } catch {
-      return '';
-    }
-  }
-
-  function expansionPath(set) {
-    return `/expansion/${slugify(set.series)}/${slugify(set.displayName)}/${encodeURIComponent(set.id)}`;
   }
 
   function syncExpansionRoute(setId, { replace = false } = {}) {
@@ -484,29 +306,6 @@ export function createApp(root) {
     }
   }
 
-  function compareSetsByNewest(a, b) {
-    return b.releaseDate.localeCompare(a.releaseDate) || a.displayName.localeCompare(b.displayName);
-  }
-
-  function slugify(value) {
-    return String(value || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  }
-
-  function buildSeriesEntries(sets) {
-    const groups = new Map();
-    for (const set of sets) {
-      if (!groups.has(set.series)) groups.set(set.series, []);
-      groups.get(set.series).push(set);
-    }
-    return Array.from(groups.entries())
-      .map(([series, groupSets]) => [series, groupSets.sort(compareSetsByNewest)])
-      .sort((a, b) => compareSetsByNewest(a[1][0], b[1][0]));
-  }
-
-  function seriesAnchorId(series) {
-    return 'series-' + slugify(series);
-  }
-
   function updateSeriesPager() {
     const totalPages = Math.max(1, state.seriesEntries.length);
     const currentPage = Math.min(state.seriesPage, totalPages);
@@ -520,8 +319,7 @@ export function createApp(root) {
   }
 
   function renderSets() {
-    state.filteredSets = state.sets
-      .sort(compareSetsByNewest);
+    state.filteredSets = [...state.sets].sort(compareSetsByNewest);
 
     el.status.textContent = state.filteredSets.length
       ? `Mostrando ${state.filteredSets.length.toLocaleString()} expansiones de la mas nueva a la mas antigua.`
@@ -561,17 +359,6 @@ export function createApp(root) {
       .sort(compareDetailCards);
   }
 
-  function routeSetId() {
-    const pathname = normalizePathname();
-    if (!pathname.startsWith('/expansion/')) return '';
-    try {
-      const parts = pathname.slice(11).split('/').filter(Boolean);
-      return decodeURIComponent(parts[parts.length - 1] || '');
-    } catch {
-      return '';
-    }
-  }
-
   function renderActiveSet() {
     const set = getSetById(state.activeSetId);
     if (!set) return;
@@ -602,6 +389,7 @@ export function createApp(root) {
   }
 
   function showHomeScreen() {
+    resetExplorerState();
     state.activeSetId = '';
     state.activeCollectionId = '';
     state.homeMode = '';
@@ -633,6 +421,7 @@ export function createApp(root) {
   }
 
   function showLibraryScreen() {
+    resetExplorerState();
     setHomeMode('library', false);
     state.activeSetId = '';
     state.activeCollectionId = '';
@@ -652,6 +441,7 @@ export function createApp(root) {
       showHomeScreen();
       return;
     }
+    resetExplorerState();
     state.activeSetId = setId;
     state.activeCollectionId = '';
     state.homeMode = 'library';
@@ -671,6 +461,7 @@ export function createApp(root) {
   }
 
   function showNotFoundScreen() {
+    resetExplorerState();
     state.activeSetId = '';
     state.activeCollectionId = '';
     state.homeMode = '';
@@ -710,6 +501,7 @@ export function createApp(root) {
   }
 
   function showCollectionsScreen() {
+    resetExplorerState();
     setHomeMode('collections', false);
     state.activeSetId = '';
     state.activeCollectionId = '';
@@ -742,7 +534,7 @@ export function createApp(root) {
       return;
     }
     const cards = collection.cards || [];
-    const visibleCards = filterCollectionCards(cards);
+    const visibleCards = filterCollectionCards(cards, state.collectionOwnershipFilter);
     el.collectionSummary.innerHTML = buildCollectionSummaryMarkup(collection);
     syncCollectionOwnershipFilterUi();
     el.collectionCardsStatus.textContent = cards.length
@@ -757,17 +549,11 @@ export function createApp(root) {
   function refreshCollectionSummary(collection) {
     const cards = collection.cards || [];
     const ownedCount = cards.filter((card) => card.owned).length;
-    const visibleCards = filterCollectionCards(cards);
+    const visibleCards = filterCollectionCards(cards, state.collectionOwnershipFilter);
     el.collectionSummary.innerHTML = buildCollectionSummaryMarkup(collection);
     el.collectionCardsStatus.textContent = cards.length
       ? `Mostrando ${visibleCards.length.toLocaleString()} de ${cards.length.toLocaleString()} cartas. Ya marcaste ${ownedCount.toLocaleString()} como obtenidas.`
       : 'Esta coleccion no tiene cartas guardadas.';
-  }
-
-  function filterCollectionCards(cards) {
-    if (state.collectionOwnershipFilter === 'owned') return cards.filter((card) => card.owned);
-    if (state.collectionOwnershipFilter === 'missing') return cards.filter((card) => !card.owned);
-    return cards;
   }
 
   function syncCollectionOwnershipFilterUi() {
@@ -785,21 +571,6 @@ export function createApp(root) {
     return filterDetailCards(cards).map(enrichCard);
   }
 
-  function detailCollectionName() {
-    const set = getSetById(state.activeSetId);
-    return set ? `Coleccion ${set.displayName}` : 'Nueva coleccion';
-  }
-
-  function detailCollectionFiltersSummary() {
-    const set = getSetById(state.activeSetId);
-    return {
-      Expansion: set ? `${set.displayName} (${set.code})` : '',
-      Buscar: state.detailQuery.trim(),
-      Clase: state.detailKind,
-      Orden: state.detailSort
-    };
-  }
-
   function updateDetailCreateCollectionButton(isBusy = false) {
     const cards = filteredCardsForActiveSet();
     const canCreate = !isBusy && Boolean(state.user) && cards.length > 0;
@@ -812,6 +583,7 @@ export function createApp(root) {
       showCollectionsScreen();
       return;
     }
+    resetExplorerState();
     state.activeSetId = '';
     state.activeCollectionId = collectionId;
     state.collectionOwnershipFilter = 'all';
@@ -906,11 +678,6 @@ export function createApp(root) {
     }
   }
 
-  function buildExplorerCacheKey(page) {
-    const f = currentFilters();
-    return ['search:v2', f.cardQuery, f.expansion, f.artist, f.cardKind, f.element, f.rarity, page].join('|');
-  }
-
   function renderExplorerResults() {
     if (!state.explorerCards.length) {
       el.explorerResults.innerHTML = '<div class="empty">No hay cartas que coincidan con los filtros actuales en esta pagina.</div>';
@@ -927,40 +694,6 @@ export function createApp(root) {
     el.explorerPager.hidden = false;
     observeLazyImages(el.explorerResults);
     updateCreateCollectionButton();
-  }
-
-  function collectionPath(collectionId) {
-    return `/mis-colecciones/${encodeURIComponent(collectionId)}`;
-  }
-
-  function collectionNameFromFilters() {
-    const filters = currentFilters();
-    const bits = [];
-    if (filters.cardQuery.trim()) bits.push(filters.cardQuery.trim());
-    if (filters.rarity.trim()) bits.push(filters.rarity.trim());
-    if (filters.artist.trim()) bits.push(filters.artist.trim());
-    if (filters.element) bits.push(filters.element);
-    if (filters.cardKind) bits.push(filters.cardKind);
-    if (filters.expansion) bits.push(el.expansionFilter.selectedOptions[0]?.textContent?.trim() || filters.expansion);
-    return bits.length ? `Coleccion ${bits.slice(0, 2).join(' - ')}` : 'Nueva coleccion';
-  }
-
-  function normalizeCollectionCards(cards) {
-    return cards.map((card) => {
-      const enriched = enrichCard(card);
-      return {
-        ...card,
-        setLabel: enriched.setLabel,
-        setLogo: enriched.setLogo,
-        setSymbol: enriched.setSymbol,
-        setCode: enriched.setCode,
-        owned: false
-      };
-    });
-  }
-
-  function collectionCardExists(collection, cardId) {
-    return Boolean(collection?.cards?.some((entry) => entry.id === cardId));
   }
 
   function activeModalCollection() {
@@ -1053,7 +786,7 @@ export function createApp(root) {
     }
     updateModalCollectionUi({ busy: true, status: `Agregando la carta a "${collection.name}"...` });
     try {
-      const updatedCollection = await addCardToCollection(collection.id, normalizeCollectionCards([card])[0]);
+      const updatedCollection = await addCardToCollection(collection.id, normalizeCollectionCards([card], enrichCard)[0]);
       if (!updatedCollection) throw new Error('Collection update failed');
       state.collections = await listCollections();
       updateModalCollectionUi({ status: `Carta agregada a "${updatedCollection.name}".` });
@@ -1069,18 +802,6 @@ export function createApp(root) {
       updateModalCollectionUi({ status: 'No se pudo agregar la carta a esta coleccion.' });
       console.error(error);
     }
-  }
-
-  function collectionFiltersSummary() {
-    const filters = currentFilters();
-    return {
-      Nombre: filters.cardQuery.trim(),
-      Expansion: filters.expansion ? (el.expansionFilter.selectedOptions[0]?.textContent?.trim() || filters.expansion) : '',
-      Artista: filters.artist.trim(),
-      Clase: filters.cardKind,
-      Elemento: filters.element,
-      Rareza: filters.rarity.trim()
-    };
   }
 
   function updateCreateCollectionButton(isBusy = false) {
@@ -1100,12 +821,17 @@ export function createApp(root) {
         }
       : await fetchExplorerPageFromApi(filters, state.setLookup, 1);
     if (!firstPage) return null;
-    const cards = [...firstPage.cards];
-    for (let page = 2; page <= firstPage.pageCount; page += 1) {
-      const nextPage = await fetchExplorerPageFromApi(filters, state.setLookup, page);
-      if (!nextPage) continue;
-      cards.push(...nextPage.cards);
-    }
+
+    const remainingPages = Array.from({ length: Math.max(firstPage.pageCount - 1, 0) }, (_, index) => index + 2);
+    const remainingResults = await Promise.all(
+      remainingPages.map((page) => fetchExplorerPageFromApi(filters, state.setLookup, page))
+    );
+
+    const cards = [
+      ...firstPage.cards,
+      ...remainingResults.flatMap((pageResult) => pageResult?.cards || [])
+    ];
+
     return {
       totalCount: cards.length,
       cards
@@ -1125,15 +851,15 @@ export function createApp(root) {
         kicker: 'Crear coleccion',
         title: 'Convierte estos filtros en una coleccion',
         copy: 'Se guardaran todas las cartas que coinciden con tu busqueda para que puedas marcar facilmente cuales ya tienes.',
-        defaultValue: collectionNameFromFilters(),
+        defaultValue: collectionNameFromFilters(currentFilters(), el.expansionFilter.selectedOptions[0]?.textContent?.trim() || ''),
         submitLabel: 'Crear coleccion'
       });
       if (chosenName === null) return;
       const collection = await createCollection({
         name: chosenName,
-        filters: collectionFiltersSummary(),
+        filters: collectionFiltersSummary(currentFilters(), el.expansionFilter.selectedOptions[0]?.textContent?.trim() || ''),
         totalCount: result.totalCount,
-        cards: normalizeCollectionCards(result.cards)
+        cards: normalizeCollectionCards(result.cards, enrichCard)
       });
       state.collections = await listCollections();
       navigateTo(collectionPath(collection.id));
@@ -1158,15 +884,15 @@ export function createApp(root) {
         kicker: 'Crear desde expansion',
         title: 'Guarda esta seleccion como coleccion',
         copy: 'Usaremos las cartas visibles en esta expansion, respetando los filtros que tienes activos en este momento.',
-        defaultValue: detailCollectionName(),
+        defaultValue: detailCollectionName(getSetById(state.activeSetId)),
         submitLabel: 'Guardar coleccion'
       });
       if (chosenName === null) return;
       const collection = await createCollection({
         name: chosenName,
-        filters: detailCollectionFiltersSummary(),
+        filters: detailCollectionFiltersSummary(getSetById(state.activeSetId), state),
         totalCount: cards.length,
-        cards: normalizeCollectionCards(cards)
+        cards: normalizeCollectionCards(cards, enrichCard)
       });
       state.collections = await listCollections();
       navigateTo(collectionPath(collection.id));
@@ -1229,7 +955,7 @@ export function createApp(root) {
       return;
     }
 
-    const cacheKey = buildExplorerCacheKey(page);
+    const cacheKey = buildExplorerCacheKey(filters, page);
     const cached = await cacheRead(cacheKey);
     if (cached?.value) {
       state.explorerCards = cached.value.cards;
@@ -1284,105 +1010,24 @@ export function createApp(root) {
     return state.explorerCards.find((card) => card.id === cardId && card.setId === setId) || null;
   }
 
-  function requestZoomRender() {
-    if (state.zoomRaf) return;
-    state.zoomRaf = requestAnimationFrame(() => {
-      state.zoomRaf = 0;
-      el.modalImage.style.transformOrigin = `${state.zoomOriginX}% ${state.zoomOriginY}%`;
-      el.modalImage.style.transform = `scale(${state.zoomActive ? state.zoomScale : 1})`;
-      el.modalImageButton.style.cursor = state.zoomActive ? 'zoom-out' : 'zoom-in';
-    });
-  }
-
-  function updateZoomOriginFromPointer(event) {
-    if (!state.zoomActive) return;
-    const rect = el.modalImageButton.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    state.zoomOriginX = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1) * 100;
-    state.zoomOriginY = Math.min(Math.max((event.clientY - rect.top) / rect.height, 0), 1) * 100;
-    requestZoomRender();
-  }
-
-  function setZoom(active, event) {
-    state.zoomActive = active;
-    if (!active) {
-      state.zoomScale = 2.2;
-      state.zoomOriginX = 50;
-      state.zoomOriginY = 50;
-    } else if (event) {
-      updateZoomOriginFromPointer(event);
-    }
-    requestZoomRender();
-  }
-
-  function prefetchLargeImage(setId, cardId) {
-    const src = findCard(setId, cardId)?.imageLarge;
-    if (!src || state.prefetchedLargeImages.has(src)) return;
-    state.prefetchedLargeImages.add(src);
-    const img = new Image();
-    img.src = src;
-  }
-
-  function schedulePrefetchLargeImage(setId, cardId) {
-    const key = `${setId}|${cardId}`;
-    state.pendingPrefetchKey = key;
-    window.clearTimeout(state.hoverPrefetchTimer);
-    state.hoverPrefetchTimer = window.setTimeout(() => {
-      if (state.isScrollActive || state.pendingPrefetchKey !== key) return;
-      const run = () => prefetchLargeImage(setId, cardId);
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(run, { timeout: 250 });
-      } else {
-        window.setTimeout(run, 0);
-      }
-    }, 120);
-  }
-
-  function openCardModal(setId, cardId, trigger) {
-    const set = getSetById(setId);
-    const card = findCard(setId, cardId);
-    if (!set || !card) return;
-    state.activeTrigger = trigger || null;
-    state.activeModalCard = enrichCard(card);
-    el.modalTitle.textContent = card.name;
-    el.modalSubtitle.textContent = `${set.displayName} (${set.code}) - #${card.number}`;
-    el.modalImage.src = card.imageLarge || card.imageSmall;
-    el.modalImage.alt = `Imagen completa de ${card.name}`;
-    const setArt = set.logo
-      ? `<img class="modal-set-image" src="${escapeHtml(set.logo)}" alt="Logo de ${escapeHtml(set.displayName)}" />`
-      : set.symbol
-        ? `<img class="modal-set-image modal-set-symbol" src="${escapeHtml(set.symbol)}" alt="Simbolo de ${escapeHtml(set.displayName)}" />`
-        : `<div class="modal-set-image modal-set-fallback" aria-hidden="true">${escapeHtml(set.code.slice(0, 3))}</div>`;
-    const displayArtist = card.artist || 'Artista no disponible';
-    const displayRarity = card.rarity || 'Sin especificar';
-    el.modalMeta.innerHTML = [
-      `<div class="modal-set-panel modal-panel-feature"><strong>Expansion</strong><div class="modal-set-panel-body">${setArt}</div></div>`,
-      buildModalFact('Rareza', displayRarity),
-      buildModalFact('Artista', displayArtist)
-    ].join('');
-    const links = [];
-    if (card.imageLarge || card.imageSmall) links.push(`<a href="${escapeHtml(card.imageLarge || card.imageSmall)}" target="_blank" rel="noreferrer">Abrir imagen completa</a>`);
-    if (card.tcgplayerUrl) links.push(`<a class="secondary" href="${escapeHtml(card.tcgplayerUrl)}" target="_blank" rel="noreferrer">Ver en TCGplayer</a>`);
-    if (card.cardmarketUrl) links.push(`<a class="secondary" href="${escapeHtml(card.cardmarketUrl)}" target="_blank" rel="noreferrer">Ver en Cardmarket</a>`);
-    el.modalLinks.innerHTML = links.join('');
-    el.modalCollectionTools.hidden = false;
-    el.modalCollectionSelect.innerHTML = '<option value="">Selecciona una coleccion</option>';
-    updateModalCollectionUi();
-    el.modal.hidden = false;
-    document.body.style.overflow = 'hidden';
-    setZoom(false);
-    el.modalClose.focus();
-    void refreshModalCollections({ force: true });
-  }
-
-  function closeModal() {
-    el.modal.hidden = true;
-    document.body.style.overflow = '';
-    setZoom(false);
-    state.activeModalCard = null;
-    state.modalCollectionsToken += 1;
-    state.activeTrigger?.focus();
-  }
+  const {
+    requestZoomRender,
+    updateZoomOriginFromPointer,
+    setZoom,
+    schedulePrefetchLargeImage,
+    openCardModal,
+    closeModal
+  } = createCardModalController({
+    el,
+    state,
+    escapeHtml,
+    buildModalFact,
+    getSetById,
+    findCard,
+    enrichCard,
+    updateModalCollectionUi,
+    refreshModalCollections
+  });
 
   function closeCollectionNameModal(result = null) {
     if (el.collectionNameModal.hidden) return;
@@ -1519,214 +1164,57 @@ export function createApp(root) {
     schedulePrefetchLargeImage(trigger.dataset.setId, trigger.dataset.cardId);
   }
 
-  el.modalClose.addEventListener('click', closeModal);
-  el.modal.addEventListener('click', (event) => {
-    if (event.target === el.modal) closeModal();
-  });
-  el.collectionNameClose.addEventListener('click', () => closeCollectionNameModal(null));
-  el.collectionNameCancel.addEventListener('click', () => closeCollectionNameModal(null));
-  el.collectionNameModal.addEventListener('click', (event) => {
-    if (event.target === el.collectionNameModal) closeCollectionNameModal(null);
-  });
-  el.collectionDeleteClose.addEventListener('click', () => closeCollectionDeleteModal(false));
-  el.collectionDeleteCancel.addEventListener('click', () => closeCollectionDeleteModal(false));
-  el.collectionDeleteConfirm.addEventListener('click', () => closeCollectionDeleteModal(true));
-  el.collectionDeleteModal.addEventListener('click', (event) => {
-    if (event.target === el.collectionDeleteModal) closeCollectionDeleteModal(false);
-  });
-  el.collectionCardRemoveClose.addEventListener('click', () => closeCollectionCardRemoveModal(false));
-  el.collectionCardRemoveCancel.addEventListener('click', () => closeCollectionCardRemoveModal(false));
-  el.collectionCardRemoveConfirm.addEventListener('click', () => closeCollectionCardRemoveModal(true));
-  el.collectionCardRemoveModal.addEventListener('click', (event) => {
-    if (event.target === el.collectionCardRemoveModal) closeCollectionCardRemoveModal(false);
-  });
-  el.collectionNameForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    closeCollectionNameModal(el.collectionNameInput.value.trim());
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !el.collectionCardRemoveModal.hidden) {
-      closeCollectionCardRemoveModal(false);
-      return;
+  bindAppEvents({
+    el,
+    state,
+    handlers: {
+      closeModal,
+      closeCollectionNameModal,
+      closeCollectionDeleteModal,
+      closeCollectionCardRemoveModal,
+      setZoom,
+      updateZoomOriginFromPointer,
+      updateModalCollectionUi,
+      handleAddModalCardToCollection,
+      handleCardTrigger,
+      handleCardHover,
+      syncExplorerRoute,
+      navigateTo,
+      setExpansionRoute,
+      renderSets,
+      renderActiveSet,
+      syncExpansionRoute,
+      persistUiState,
+      handleCreateCollectionFromDetail,
+      handleCreateCollection,
+      resetExplorerState,
+      handleDeleteCollectionById,
+      getCollection,
+      requestCollectionCardRemoval,
+      removeCardFromCollection,
+      listCollections,
+      renderCollectionDetail,
+      renderCollectionsList,
+      updateCollectionCardOwnership,
+      refreshCollectionSummary,
+      signOut,
+      handleRenameCollection,
+      handleDeleteCollection,
+      syncRoute,
+      collectionPath,
+      requestZoomRender,
+      debounce
     }
-    if (event.key === 'Escape' && !el.collectionDeleteModal.hidden) {
-      closeCollectionDeleteModal(false);
-      return;
-    }
-    if (event.key === 'Escape' && !el.collectionNameModal.hidden) {
-      closeCollectionNameModal(null);
-      return;
-    }
-    if (event.key === 'Escape' && !el.modal.hidden) closeModal();
   });
-  el.modalImageButton.addEventListener('click', (event) => setZoom(!state.zoomActive, event));
-  el.modalImageButton.addEventListener('pointermove', updateZoomOriginFromPointer);
-  el.modalCollectionSelect.addEventListener('change', () => updateModalCollectionUi());
-  el.modalCollectionSubmit.addEventListener('click', () => { void handleAddModalCardToCollection(); });
-  el.modalImageButton.addEventListener('wheel', (event) => {
-    if (!state.zoomActive) return;
-    event.preventDefault();
-    state.zoomScale = Math.min(5, Math.max(1.4, state.zoomScale + (event.deltaY < 0 ? 0.22 : -0.22)));
-    requestZoomRender();
-  }, { passive: false });
 
-  el.seriesList.addEventListener('click', (event) => {
-    const expansionCard = event.target.closest('.expansion-card');
-    if (!expansionCard) return;
-    state.homeMode = 'library';
-    setExpansionRoute(expansionCard.dataset.openSetId);
+  bootstrapApp({
+    setAuthChangeHandler,
+    handleAuthChange,
+    hydrateUiState,
+    renderAuthUi,
+    updateHomeModeUi,
+    syncRoute,
+    initializeAuth,
+    hydrateSets
   });
-  el.modeExplorerButton.addEventListener('click', () => { syncExplorerRoute(1); });
-  el.modeLibraryButton.addEventListener('click', () => { navigateTo('/library'); });
-  el.modeCollectionsButton.addEventListener('click', () => { navigateTo('/mis-colecciones'); });
-  el.notFoundHome.addEventListener('click', () => { navigateTo('/'); });
-  el.notFoundLibrary.addEventListener('click', () => { navigateTo('/library'); });
-  el.explorerHome.addEventListener('click', () => { navigateTo('/'); });
-  el.libraryHome.addEventListener('click', () => { navigateTo('/'); });
-  el.collectionsHome.addEventListener('click', () => { navigateTo('/'); });
-  el.detailBack.addEventListener('click', () => { navigateTo('/library'); });
-  el.collectionBack.addEventListener('click', () => { navigateTo('/mis-colecciones'); });
-  el.seriesPrev.addEventListener('click', () => {
-    if (state.seriesPage <= 1) return;
-    state.seriesPage -= 1;
-    renderSets();
-  });
-  el.seriesNext.addEventListener('click', () => {
-    if (state.seriesPage >= state.seriesEntries.length) return;
-    state.seriesPage += 1;
-    renderSets();
-  });
-  const debouncedDetailRender = debounce(() => {
-    if (!state.activeSetId) return;
-    renderActiveSet();
-    syncExpansionRoute(state.activeSetId, { replace: true });
-    persistUiState();
-  }, 120);
-  el.detailSearch.addEventListener('input', () => {
-    state.detailQuery = el.detailSearch.value;
-    debouncedDetailRender();
-  });
-  el.detailKindFilter.addEventListener('change', () => {
-    state.detailKind = el.detailKindFilter.value;
-    renderActiveSet();
-    syncExpansionRoute(state.activeSetId, { replace: true });
-    persistUiState();
-  });
-  el.detailSortFilter.addEventListener('change', () => {
-    state.detailSort = el.detailSortFilter.value;
-    renderActiveSet();
-    syncExpansionRoute(state.activeSetId, { replace: true });
-    persistUiState();
-  });
-  el.detailCreateCollectionButton.addEventListener('click', handleCreateCollectionFromDetail);
-  el.expansionCards.addEventListener('click', handleCardTrigger);
-  el.explorerResults.addEventListener('click', handleCardTrigger);
-  el.expansionCards.addEventListener('pointerenter', handleCardHover, true);
-  el.explorerResults.addEventListener('pointerenter', handleCardHover, true);
-  el.runFiltersButton.addEventListener('click', () => {
-    state.explorerPage = 1;
-    syncExplorerRoute(1);
-  });
-  el.createCollectionButton.addEventListener('click', handleCreateCollection);
-  el.clearFiltersButton.addEventListener('click', () => {
-    el.cardQueryInput.value = '';
-    el.expansionFilter.value = '';
-    el.artistFilter.value = '';
-    el.cardKindFilter.value = '';
-    el.elementFilter.value = '';
-    el.rarityFilter.value = '';
-    state.explorerCards = [];
-    state.explorerPage = 1;
-    state.explorerTotalPages = 1;
-    state.explorerTotalCount = 0;
-    el.explorerStatus.textContent = 'Elige uno o mas filtros para buscar cartas entre las expansiones incluidas.';
-    el.explorerResults.innerHTML = '<div class="empty">Todavia no hiciste una busqueda en vivo.</div>';
-    el.explorerPager.hidden = true;
-    updateCreateCollectionButton();
-    persistUiState();
-    syncExplorerRoute(1, { replace: true });
-  });
-  el.collectionsList.addEventListener('click', (event) => {
-    const deleteTrigger = event.target.closest('[data-delete-collection-id]');
-    if (deleteTrigger) {
-      void handleDeleteCollectionById(deleteTrigger.dataset.deleteCollectionId);
-      return;
-    }
-    const trigger = event.target.closest('[data-open-collection-id]');
-    if (!trigger) return;
-    navigateTo(collectionPath(trigger.dataset.openCollectionId));
-  });
-  el.collectionCards.addEventListener('click', async (event) => {
-    const removeTrigger = event.target.closest('[data-remove-collection-card]');
-    if (removeTrigger) {
-      const collectionId = removeTrigger.dataset.removeCollectionCard;
-      const cardId = removeTrigger.dataset.cardId;
-      const collection = await getCollection(collectionId, { force: true });
-      const card = collection?.cards?.find((entry) => entry.id === cardId);
-      if (!collection || !card) return;
-      const confirmed = await requestCollectionCardRemoval(collection, card);
-      if (!confirmed) return;
-      const updatedCollection = await removeCardFromCollection(collectionId, cardId);
-      if (!updatedCollection) return;
-      state.collections = await listCollections();
-      await renderCollectionDetail();
-      if (!el.collectionsShell.hidden) void renderCollectionsList();
-      return;
-    }
-    const trigger = event.target.closest('[data-toggle-collection-card]')
-      || event.target.closest('.collection-entry')?.querySelector('[data-toggle-collection-card]');
-    if (!trigger) return;
-    if (event.target.closest('a')) return;
-    const collectionId = trigger.dataset.toggleCollectionCard;
-    const cardId = trigger.dataset.cardId;
-    const collection = await getCollection(collectionId, { force: true });
-    const card = collection?.cards?.find((entry) => entry.id === cardId);
-    if (!collection || !card) return;
-    const nextOwned = !card.owned;
-    const updatedCollection = await updateCollectionCardOwnership(collectionId, cardId, nextOwned);
-    if (!updatedCollection) return;
-    trigger.closest('.collection-entry')?.classList.toggle('is-owned', nextOwned);
-    trigger.setAttribute('aria-pressed', String(nextOwned));
-    refreshCollectionSummary(updatedCollection);
-    state.collections = await listCollections();
-    if (!el.collectionsShell.hidden) void renderCollectionsList();
-    if ((state.collectionOwnershipFilter === 'owned' && !nextOwned) || (state.collectionOwnershipFilter === 'missing' && nextOwned)) {
-      void renderCollectionDetail();
-    }
-  });
-  el.collectionOwnershipFilters.addEventListener('click', (event) => {
-    const trigger = event.target.closest('[data-collection-filter]');
-    if (!trigger) return;
-    state.collectionOwnershipFilter = trigger.dataset.collectionFilter;
-    void renderCollectionDetail();
-  });
-  el.authControls.addEventListener('click', (event) => {
-    const trigger = event.target.closest('#auth-logout');
-    if (!trigger) return;
-    void signOut();
-  });
-  el.collectionRename.addEventListener('click', handleRenameCollection);
-  el.collectionDelete.addEventListener('click', handleDeleteCollection);
-  window.addEventListener('scroll', () => {
-    state.isScrollActive = true;
-    window.clearTimeout(state.scrollIdleTimer);
-    state.scrollIdleTimer = window.setTimeout(() => {
-      state.isScrollActive = false;
-    }, 140);
-  }, { passive: true });
-  el.explorerPrev.addEventListener('click', () => {
-    if (state.explorerPage > 1) syncExplorerRoute(state.explorerPage - 1);
-  });
-  el.explorerNext.addEventListener('click', () => {
-    if (state.explorerPage < state.explorerTotalPages) syncExplorerRoute(state.explorerPage + 1);
-  });
-  window.addEventListener('popstate', syncRoute);
-
-  setAuthChangeHandler(handleAuthChange);
-  hydrateUiState();
-  renderAuthUi();
-  updateHomeModeUi();
-  syncRoute();
-  void initializeAuth();
-  hydrateSets();
 }

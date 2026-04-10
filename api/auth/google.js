@@ -1,11 +1,8 @@
 import { createSession, publicUserFromDocument, upsertUserFromGoogle, verifyGoogleCredential } from '../_lib/auth.js';
-import { methodNotAllowed, readJson, sendError, sendJson } from '../_lib/http.js';
+import { ensureMethod, readJson, sendError, sendJson } from '../_lib/http.js';
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    methodNotAllowed(res, ['POST']);
-    return;
-  }
+  if (!ensureMethod(req, res, ['POST'])) return;
 
   try {
     const body = await readJson(req);

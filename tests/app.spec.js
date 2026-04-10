@@ -442,6 +442,31 @@ test('supports advanced explorer filters and pagination', async ({ page }) => {
   await expect(page.locator('.card-list .card-name')).toContainText(['Rare Pokemon 25']);
 });
 
+test('resets explorer filters and results after navigating away and back', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /explorador de cartas/i }).click();
+  await page.locator('#card-query').fill('Pikachu');
+  await page.getByRole('button', { name: /buscar cartas/i }).click();
+
+  await expect(page).toHaveURL(/\/explorer\?q=Pikachu$/);
+  await expect(page.locator('.card-list .card-item')).toHaveCount(1);
+
+  await page.locator('#explorer-home').click();
+  await expect(page).toHaveURL(/\/$/);
+
+  await page.getByRole('button', { name: /biblioteca de expansiones/i }).click();
+  await expect(page).toHaveURL(/\/library$/);
+
+  await page.locator('#library-home').click();
+  await expect(page).toHaveURL(/\/$/);
+
+  await page.getByRole('button', { name: /explorador de cartas/i }).click();
+  await expect(page).toHaveURL(/\/explorer$/);
+  await expect(page.locator('#card-query')).toHaveValue('');
+  await expect(page.locator('#explorer-results')).toContainText('Todavia no hiciste una busqueda en vivo.');
+  await expect(page.locator('.card-list .card-item')).toHaveCount(0);
+});
+
 test('creates personal collections from explorer filters and tracks owned cards', async ({ page }) => {
   await signInAsTestUser(page);
   await page.goto('/');

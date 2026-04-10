@@ -14,6 +14,12 @@ export function methodNotAllowed(res, allowedMethods) {
   sendError(res, 405, 'Method not allowed.');
 }
 
+export function ensureMethod(req, res, allowedMethods) {
+  if (allowedMethods.includes(req.method || '')) return true;
+  methodNotAllowed(res, allowedMethods);
+  return false;
+}
+
 export function getQueryParam(req, name) {
   const url = new URL(req.url || '/', 'http://localhost');
   return url.searchParams.get(name) || '';

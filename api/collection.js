@@ -35,14 +35,15 @@ export default async function handler(req, res) {
       return;
     }
 
-    await collectionStore.updateOne(query, {
+    const doc = await collectionStore.findOneAndUpdate(query, {
       $set: {
         name,
         updatedAt: new Date()
       }
+    }, {
+      returnDocument: 'after'
     });
 
-    const doc = await collectionStore.findOne(query);
     if (!doc) {
       sendError(res, 404, 'Collection not found.');
       return;

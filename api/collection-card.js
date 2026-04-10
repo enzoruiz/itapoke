@@ -15,6 +15,7 @@ export default async function handler(req, res) {
 
   const db = await getDb();
   const collectionStore = db.collection('collections');
+  const collectionQuery = { userId: auth.user._id, id: collectionId };
 
   if (req.method === 'POST') {
     const body = await readJson(req);
@@ -25,7 +26,7 @@ export default async function handler(req, res) {
     }
 
     const result = await collectionStore.findOneAndUpdate(
-      { userId: auth.user._id, id: collectionId, 'cards.id': { $ne: card.id } },
+      { ...collectionQuery, 'cards.id': { $ne: card.id } },
       {
         $push: { cards: card },
         $set: { updatedAt: new Date() },
@@ -39,7 +40,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const existing = await collectionStore.findOne({ userId: auth.user._id, id: collectionId });
+    const existing = await collectionStore.findOne(collectionQuery);
     if (!existing) {
       sendError(res, 404, 'Collection not found.');
       return;
@@ -59,7 +60,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const existing = await collectionStore.findOne({ userId: auth.user._id, id: collectionId });
+    const existing = await collectionStore.findOne(collectionQuery);
     if (!existing) {
       sendError(res, 404, 'Collection not found.');
       return;
@@ -72,7 +73,7 @@ export default async function handler(req, res) {
     }
 
     const result = await collectionStore.findOneAndUpdate(
-      { userId: auth.user._id, id: collectionId },
+      collectionQuery,
       {
         $set: {
           cards: nextCards,
@@ -107,7 +108,7 @@ export default async function handler(req, res) {
   const owned = Boolean(body.owned);
 
   const result = await collectionStore.findOneAndUpdate(
-    { userId: auth.user._id, id: collectionId, 'cards.id': cardId },
+    { ...collectionQuery, 'cards.id': cardId },
     {
       $set: {
         'cards.$.owned': owned,
