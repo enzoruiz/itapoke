@@ -52,8 +52,48 @@ export default async function handler(req, res) {
     return;
   }
 
+  if (req.method === 'DELETE') {
+    const cardId = getQueryParam(req, 'cardId');
+    if (!cardId) {
+      sendError(res, 400, 'Card id is required.');
+      return;
+    }
+
+    const existing = await collectionStore.findOne({ userId: auth.user._id, id: collectionId });
+    if (!existing) {
+      sendError(res, 404, 'Collection not found.');
+      return;
+    }
+
+    const nextCards = Array.isArray(existing.cards) ? existing.cards.filter((entry) => entry.id !== cardId) : [];
+    if (nextCards.length === (Array.isArray(existing.cards) ? existing.cards.length : 0)) {
+      sendError(res, 404, 'Collection card not found.');
+      return;
+    }
+
+    const result = await collectionStore.findOneAndUpdate(
+      { userId: auth.user._id, id: collectionId },
+      {
+        $set: {
+          cards: nextCards,
+          totalCount: nextCards.length,
+          updatedAt: new Date()
+        }
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!result) {
+      sendError(res, 404, 'Collection card not found.');
+      return;
+    }
+
+    sendJson(res, 200, { collection: serializeCollection(result) });
+    return;
+  }
+
   if (req.method !== 'PATCH') {
-    methodNotAllowed(res, ['POST', 'PATCH']);
+    methodNotAllowed(res, ['POST', 'PATCH', 'DELETE']);
     return;
   }
 

@@ -45,20 +45,35 @@ export async function fetchExplorerPageFromApi(filters, setLookup, page, signal)
   if (filters.rarity.trim()) clauses.push(buildContainsClause('rarity', filters.rarity));
   if (!clauses.length) return null;
 
-  const params = new URLSearchParams({
-    q: clauses.join(' '),
-    orderBy: 'set.releaseDate,name',
-    page: String(page),
-    pageSize: String(PAGE_SIZE),
-    select: CARD_FIELDS
-  });
-  const json = await fetchJson(`${API_BASE}/cards?${params.toString()}`, { signal });
-  const cards = json.data.map(normalizeCard).filter((card) => setLookup.has(card.setId));
+  const query = clauses.join(' ');
+  const filteredCards = [];
+  let apiPage = 1;
+  let apiPageCount = 1;
+
+  while (apiPage <= apiPageCount) {
+    const params = new URLSearchParams({
+      q: query,
+      orderBy: 'set.releaseDate,name',
+      page: String(apiPage),
+      pageSize: String(PAGE_SIZE),
+      select: CARD_FIELDS
+    });
+    const json = await fetchJson(`${API_BASE}/cards?${params.toString()}`, { signal });
+    apiPageCount = json.pageCount || Math.max(1, Math.ceil((json.totalCount || json.count || 0) / (json.pageSize || PAGE_SIZE)));
+    filteredCards.push(...json.data.map(normalizeCard).filter((card) => setLookup.has(card.setId)));
+    apiPage += 1;
+  }
+
+  const totalCount = filteredCards.length;
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 1), pageCount);
+  const start = (safePage - 1) * PAGE_SIZE;
+  const cards = filteredCards.slice(start, start + PAGE_SIZE);
 
   return {
     cards,
-    page: json.page || page,
-    pageCount: json.pageCount || Math.max(1, Math.ceil((json.totalCount || json.count || 0) / (json.pageSize || PAGE_SIZE))),
-    totalCount: json.totalCount || json.count || cards.length
+    page: safePage,
+    pageCount,
+    totalCount
   };
 }

@@ -899,10 +899,15 @@ h2 {
 }
 
 .collection-metrics,
-.collection-filter-chips {
+.collection-filter-chips,
+.collection-card-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.collection-card-actions {
+  margin-top: 2px;
 }
 
 .collection-metrics span,
@@ -922,14 +927,27 @@ h2 {
 
 .collection-entry {
   width: 100%;
-  grid-template-columns: 120px minmax(0, 1fr);
-  align-items: start;
-  column-gap: 18px;
+  grid-template-columns: 1fr;
+  row-gap: 14px;
   padding: 22px;
   border-width: 2px;
   text-align: left;
   cursor: pointer;
   overflow: hidden;
+}
+
+.collection-entry-toggle {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 18px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .collection-entry.is-owned {
@@ -961,6 +979,25 @@ h2 {
 .collection-entry-body {
   min-width: 0;
   align-content: start;
+}
+
+.collection-entry-footer {
+  display: flex;
+  gap: 14px;
+  justify-content: flex-end;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid rgba(65, 83, 120, 0.12);
+}
+
+.collection-entry-remove {
+  position: relative;
+  z-index: 1;
+  min-width: 148px;
+}
+
+.collection-delete-fact {
+  background: rgba(248, 252, 255, 0.92);
 }
 
 .collection-entry-set {
@@ -1585,6 +1622,10 @@ h2 {
   }
 
   .collection-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-entry-toggle {
     grid-template-columns: 132px minmax(0, 1fr);
   }
 
@@ -1675,7 +1716,10 @@ h2 {
 
   .modal-close,
   .modal-links a,
-  .modal-collection-tools .action-btn {
+  .modal-collection-tools .action-btn,
+  .collection-card-actions .action-btn,
+  .collection-detail-actions .action-btn,
+  .collection-entry-remove {
     width: 100%;
   }
 
@@ -1704,6 +1748,19 @@ h2 {
   }
 
   .collection-entry {
+    grid-template-columns: 1fr;
+    row-gap: 14px;
+  }
+
+  .collection-entry-footer {
+    flex-direction: column;
+    align-items: stretch;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+
+  .collection-entry-toggle {
     grid-template-columns: 1fr;
     row-gap: 18px;
   }

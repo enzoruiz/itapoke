@@ -2,7 +2,7 @@ import { CARDS_TTL, SEARCH_TTL, SETS_TTL } from './config.js';
 import { fetchCardsForSetFromApi, fetchExplorerPageFromApi, fetchSetsFromApi } from './api.js';
 import { getAuthSession, initializeAuth, mountGoogleAuthButton, setAuthChangeHandler, signOut } from './auth.js';
 import { cacheRead, cacheWrite, isFresh, restoreUiState, saveUiState } from './cache.js';
-import { addCardToCollection, createCollection, deleteCollection, getCollection, listCollections, renameCollection, updateCollectionCardOwnership } from './collections.js';
+import { addCardToCollection, createCollection, deleteCollection, getCollection, listCollections, removeCardFromCollection, renameCollection, updateCollectionCardOwnership } from './collections.js';
 import {
   APP_SHELL,
   buildCardButtonMarkup,
@@ -48,6 +48,8 @@ export function createApp(root) {
     scrollIdleTimer: 0,
     detailRenderToken: 0,
     collectionPromptResolve: null,
+    collectionDeleteResolve: null,
+    collectionCardRemoveResolve: null,
     activeModalCard: null,
     modalCollectionsToken: 0,
     controllers: { sets: null, explorer: null, setCards: new Map() },
@@ -143,7 +145,23 @@ export function createApp(root) {
     collectionNameCopy: root.querySelector('#collection-name-copy'),
     collectionNameInput: root.querySelector('#collection-name-input'),
     collectionNameCancel: root.querySelector('#collection-name-cancel'),
-    collectionNameSubmit: root.querySelector('#collection-name-submit')
+    collectionNameSubmit: root.querySelector('#collection-name-submit'),
+    collectionDeleteModal: root.querySelector('#collection-delete-modal'),
+    collectionDeleteClose: root.querySelector('#collection-delete-close'),
+    collectionDeleteKicker: root.querySelector('#collection-delete-kicker'),
+    collectionDeleteTitle: root.querySelector('#collection-delete-title'),
+    collectionDeleteCopy: root.querySelector('#collection-delete-copy'),
+    collectionDeleteName: root.querySelector('#collection-delete-name'),
+    collectionDeleteCancel: root.querySelector('#collection-delete-cancel'),
+    collectionDeleteConfirm: root.querySelector('#collection-delete-confirm'),
+    collectionCardRemoveModal: root.querySelector('#collection-card-remove-modal'),
+    collectionCardRemoveClose: root.querySelector('#collection-card-remove-close'),
+    collectionCardRemoveKicker: root.querySelector('#collection-card-remove-kicker'),
+    collectionCardRemoveTitle: root.querySelector('#collection-card-remove-title'),
+    collectionCardRemoveCopy: root.querySelector('#collection-card-remove-copy'),
+    collectionCardRemoveName: root.querySelector('#collection-card-remove-name'),
+    collectionCardRemoveCancel: root.querySelector('#collection-card-remove-cancel'),
+    collectionCardRemoveConfirm: root.querySelector('#collection-card-remove-confirm')
   };
 
   function currentFilters() {
@@ -1089,7 +1107,7 @@ export function createApp(root) {
       cards.push(...nextPage.cards);
     }
     return {
-      totalCount: firstPage.totalCount,
+      totalCount: cards.length,
       cards
     };
   }
@@ -1177,13 +1195,22 @@ export function createApp(root) {
   }
 
   async function handleDeleteCollection() {
-    const collection = await getCollection(state.activeCollectionId, { force: true });
+    await handleDeleteCollectionById(state.activeCollectionId, { redirectToList: true });
+  }
+
+  async function handleDeleteCollectionById(collectionId, { redirectToList = false } = {}) {
+    const collection = await getCollection(collectionId, { force: true });
     if (!collection) return;
-    const confirmed = window.confirm(`Vas a borrar la coleccion "${collection.name}". Esta accion no se puede deshacer.`);
+    const confirmed = await requestCollectionDeletion(collection);
     if (!confirmed) return;
     await deleteCollection(collection.id);
-    state.collections = await listCollections();
-    navigateTo('/mis-colecciones');
+    state.collections = await listCollections({ force: true });
+    if (redirectToList) {
+      navigateTo('/mis-colecciones');
+      await renderCollectionsList();
+      return;
+    }
+    await renderCollectionsList();
   }
 
   async function runExplorerSearch(page = 1) {
@@ -1360,9 +1387,27 @@ export function createApp(root) {
   function closeCollectionNameModal(result = null) {
     if (el.collectionNameModal.hidden) return;
     el.collectionNameModal.hidden = true;
-    if (el.modal.hidden) document.body.style.overflow = '';
+    if (el.modal.hidden && el.collectionDeleteModal.hidden && el.collectionCardRemoveModal.hidden) document.body.style.overflow = '';
     const resolve = state.collectionPromptResolve;
     state.collectionPromptResolve = null;
+    if (resolve) resolve(result);
+  }
+
+  function closeCollectionDeleteModal(result = false) {
+    if (el.collectionDeleteModal.hidden) return;
+    el.collectionDeleteModal.hidden = true;
+    if (el.modal.hidden && el.collectionNameModal.hidden && el.collectionCardRemoveModal.hidden) document.body.style.overflow = '';
+    const resolve = state.collectionDeleteResolve;
+    state.collectionDeleteResolve = null;
+    if (resolve) resolve(result);
+  }
+
+  function closeCollectionCardRemoveModal(result = false) {
+    if (el.collectionCardRemoveModal.hidden) return;
+    el.collectionCardRemoveModal.hidden = true;
+    if (el.modal.hidden && el.collectionNameModal.hidden && el.collectionDeleteModal.hidden) document.body.style.overflow = '';
+    const resolve = state.collectionCardRemoveResolve;
+    state.collectionCardRemoveResolve = null;
     if (resolve) resolve(result);
   }
 
@@ -1381,6 +1426,38 @@ export function createApp(root) {
     });
     return new Promise((resolve) => {
       state.collectionPromptResolve = resolve;
+    });
+  }
+
+  function requestCollectionDeletion(collection) {
+    if (state.collectionDeleteResolve) closeCollectionDeleteModal(false);
+    el.collectionDeleteKicker.textContent = 'Eliminar coleccion';
+    el.collectionDeleteTitle.textContent = `Vas a borrar "${collection.name}"`;
+    el.collectionDeleteCopy.textContent = `Se eliminaran ${Number(collection.cards?.length || 0).toLocaleString()} cartas guardadas y esta accion no se puede deshacer.`;
+    el.collectionDeleteName.textContent = collection.name;
+    el.collectionDeleteModal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => {
+      el.collectionDeleteConfirm.focus();
+    });
+    return new Promise((resolve) => {
+      state.collectionDeleteResolve = resolve;
+    });
+  }
+
+  function requestCollectionCardRemoval(collection, card) {
+    if (state.collectionCardRemoveResolve) closeCollectionCardRemoveModal(false);
+    el.collectionCardRemoveKicker.textContent = 'Quitar carta';
+    el.collectionCardRemoveTitle.textContent = `Quitar "${card.name}"`;
+    el.collectionCardRemoveCopy.textContent = `La carta se quitara de la coleccion "${collection.name}" y dejara de contarse en su progreso.`;
+    el.collectionCardRemoveName.textContent = card.name;
+    el.collectionCardRemoveModal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => {
+      el.collectionCardRemoveConfirm.focus();
+    });
+    return new Promise((resolve) => {
+      state.collectionCardRemoveResolve = resolve;
     });
   }
 
@@ -1451,11 +1528,31 @@ export function createApp(root) {
   el.collectionNameModal.addEventListener('click', (event) => {
     if (event.target === el.collectionNameModal) closeCollectionNameModal(null);
   });
+  el.collectionDeleteClose.addEventListener('click', () => closeCollectionDeleteModal(false));
+  el.collectionDeleteCancel.addEventListener('click', () => closeCollectionDeleteModal(false));
+  el.collectionDeleteConfirm.addEventListener('click', () => closeCollectionDeleteModal(true));
+  el.collectionDeleteModal.addEventListener('click', (event) => {
+    if (event.target === el.collectionDeleteModal) closeCollectionDeleteModal(false);
+  });
+  el.collectionCardRemoveClose.addEventListener('click', () => closeCollectionCardRemoveModal(false));
+  el.collectionCardRemoveCancel.addEventListener('click', () => closeCollectionCardRemoveModal(false));
+  el.collectionCardRemoveConfirm.addEventListener('click', () => closeCollectionCardRemoveModal(true));
+  el.collectionCardRemoveModal.addEventListener('click', (event) => {
+    if (event.target === el.collectionCardRemoveModal) closeCollectionCardRemoveModal(false);
+  });
   el.collectionNameForm.addEventListener('submit', (event) => {
     event.preventDefault();
     closeCollectionNameModal(el.collectionNameInput.value.trim());
   });
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !el.collectionCardRemoveModal.hidden) {
+      closeCollectionCardRemoveModal(false);
+      return;
+    }
+    if (event.key === 'Escape' && !el.collectionDeleteModal.hidden) {
+      closeCollectionDeleteModal(false);
+      return;
+    }
     if (event.key === 'Escape' && !el.collectionNameModal.hidden) {
       closeCollectionNameModal(null);
       return;
@@ -1550,12 +1647,34 @@ export function createApp(root) {
     syncExplorerRoute(1, { replace: true });
   });
   el.collectionsList.addEventListener('click', (event) => {
+    const deleteTrigger = event.target.closest('[data-delete-collection-id]');
+    if (deleteTrigger) {
+      void handleDeleteCollectionById(deleteTrigger.dataset.deleteCollectionId);
+      return;
+    }
     const trigger = event.target.closest('[data-open-collection-id]');
     if (!trigger) return;
     navigateTo(collectionPath(trigger.dataset.openCollectionId));
   });
   el.collectionCards.addEventListener('click', async (event) => {
-    const trigger = event.target.closest('[data-toggle-collection-card]');
+    const removeTrigger = event.target.closest('[data-remove-collection-card]');
+    if (removeTrigger) {
+      const collectionId = removeTrigger.dataset.removeCollectionCard;
+      const cardId = removeTrigger.dataset.cardId;
+      const collection = await getCollection(collectionId, { force: true });
+      const card = collection?.cards?.find((entry) => entry.id === cardId);
+      if (!collection || !card) return;
+      const confirmed = await requestCollectionCardRemoval(collection, card);
+      if (!confirmed) return;
+      const updatedCollection = await removeCardFromCollection(collectionId, cardId);
+      if (!updatedCollection) return;
+      state.collections = await listCollections();
+      await renderCollectionDetail();
+      if (!el.collectionsShell.hidden) void renderCollectionsList();
+      return;
+    }
+    const trigger = event.target.closest('[data-toggle-collection-card]')
+      || event.target.closest('.collection-entry')?.querySelector('[data-toggle-collection-card]');
     if (!trigger) return;
     if (event.target.closest('a')) return;
     const collectionId = trigger.dataset.toggleCollectionCard;
@@ -1566,7 +1685,7 @@ export function createApp(root) {
     const nextOwned = !card.owned;
     const updatedCollection = await updateCollectionCardOwnership(collectionId, cardId, nextOwned);
     if (!updatedCollection) return;
-    trigger.classList.toggle('is-owned', nextOwned);
+    trigger.closest('.collection-entry')?.classList.toggle('is-owned', nextOwned);
     trigger.setAttribute('aria-pressed', String(nextOwned));
     refreshCollectionSummary(updatedCollection);
     state.collections = await listCollections();

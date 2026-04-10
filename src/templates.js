@@ -122,7 +122,7 @@ export const APP_SHELL = `
         <button class="action-btn" id="collection-back" type="button">Volver a Mis Colecciones</button>
         <div class="collection-detail-actions">
           <button class="action-btn" id="collection-rename" type="button">Renombrar</button>
-          <button class="action-btn danger" id="collection-delete" type="button">Borrar</button>
+          <button class="action-btn danger" id="collection-delete" type="button">Eliminar coleccion</button>
         </div>
       </div>
       <div id="collection-summary"></div>
@@ -210,14 +210,64 @@ export const APP_SHELL = `
       </article>
     </div>
   </div>
+
+  <div class="modal" id="collection-delete-modal" hidden>
+    <div class="modal-frame prompt-modal-frame">
+      <article class="modal-card prompt-modal-card">
+        <div class="prompt-form collection-delete-prompt">
+          <div class="modal-top">
+            <div>
+              <p class="eyebrow" id="collection-delete-kicker">Eliminar coleccion</p>
+              <h2 id="collection-delete-title">Confirma esta eliminacion</h2>
+            </div>
+            <button class="modal-close" id="collection-delete-close" type="button">Cerrar</button>
+          </div>
+          <p class="subtitle prompt-copy" id="collection-delete-copy">Esta accion quitara la coleccion y todas sus cartas guardadas.</p>
+          <div class="detail-fact collection-delete-fact">
+            <span>Coleccion</span>
+            <strong id="collection-delete-name">Mi coleccion</strong>
+          </div>
+          <div class="prompt-actions">
+            <button class="action-btn" id="collection-delete-cancel" type="button">Cancelar</button>
+            <button class="action-btn danger" id="collection-delete-confirm" type="button">Eliminar coleccion</button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <div class="modal" id="collection-card-remove-modal" hidden>
+    <div class="modal-frame prompt-modal-frame">
+      <article class="modal-card prompt-modal-card">
+        <div class="prompt-form collection-delete-prompt">
+          <div class="modal-top">
+            <div>
+              <p class="eyebrow" id="collection-card-remove-kicker">Quitar carta</p>
+              <h2 id="collection-card-remove-title">Confirma esta accion</h2>
+            </div>
+            <button class="modal-close" id="collection-card-remove-close" type="button">Cerrar</button>
+          </div>
+          <p class="subtitle prompt-copy" id="collection-card-remove-copy">La carta se quitara de esta coleccion guardada.</p>
+          <div class="detail-fact collection-delete-fact">
+            <span>Carta</span>
+            <strong id="collection-card-remove-name">Carta</strong>
+          </div>
+          <div class="prompt-actions">
+            <button class="action-btn" id="collection-card-remove-cancel" type="button">Cancelar</button>
+            <button class="action-btn danger" id="collection-card-remove-confirm" type="button">Quitar carta</button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
 `;
 
-export function topStatsMarkup(totals, fromCache) {
+export function topStatsMarkup(totals) {
   return [
     ['Expansiones', totals.sets.toLocaleString()],
     ['Sets principales', totals.main.toLocaleString()],
     ['Sets especiales', totals.special.toLocaleString()],
-    ['Datos', fromCache ? 'Cache + live' : 'API live']
+    ['Datos', 'API live']
   ].map(([label, value]) => `<article class="stat"><span class="stat-label">${label}</span><strong>${value}</strong></article>`).join('');
 }
 
@@ -256,7 +306,7 @@ export function buildExpansionDetailLoaderMarkup(set) {
       ? `<img class="detail-loader-logo detail-loader-symbol" src="${escapeHtml(set.symbol)}" alt="Simbolo de ${escapeHtml(set.displayName)}" />`
       : `<div class="detail-loader-logo detail-loader-placeholder" aria-hidden="true">${escapeHtml(set.code.slice(0, 3))}</div>`;
   const skeletons = Array.from({ length: 8 }, (_, index) => `<li class="detail-skeleton-item" style="--skeleton-delay:${index * 70}ms" aria-hidden="true"><div class="detail-skeleton-card"></div></li>`).join('');
-  return `<div class="detail-loader" role="status" aria-live="polite"><div class="detail-loader-orbit"><span class="detail-loader-ring detail-loader-ring-outer" aria-hidden="true"></span><span class="detail-loader-ring detail-loader-ring-inner" aria-hidden="true"></span><div class="detail-loader-core">${media}</div></div><div class="detail-loader-copy"><p class="detail-loader-kicker">Preparando expansion</p><strong>${escapeHtml(set.displayName)}</strong><span>Cargando cartas desde cache o API en vivo...</span></div></div><ol class="detail-skeleton-grid">${skeletons}</ol>`;
+  return `<div class="detail-loader" role="status" aria-live="polite"><div class="detail-loader-orbit"><span class="detail-loader-ring detail-loader-ring-outer" aria-hidden="true"></span><span class="detail-loader-ring detail-loader-ring-inner" aria-hidden="true"></span><div class="detail-loader-core">${media}</div></div><div class="detail-loader-copy"><p class="detail-loader-kicker">Preparando expansion</p><strong>${escapeHtml(set.displayName)}</strong><span>Cargando cartas desde la API en vivo...</span></div></div><ol class="detail-skeleton-grid">${skeletons}</ol>`;
 }
 
 export function buildCompactCardPosterMarkup(card, setId, eager = false) {
@@ -273,7 +323,7 @@ export function buildCollectionCardMarkup(collection) {
   const filterBits = Object.entries(collection.filters || {})
     .filter(([, value]) => String(value || '').trim())
     .map(([key, value]) => `${key}: ${value}`);
-  return `<article class="collection-card"><div class="collection-card-main"><p class="eyebrow">Coleccion guardada</p><h3>${escapeHtml(collection.name)}</h3><p class="subtitle">${filterBits.length ? escapeHtml(filterBits.join(' - ')) : 'Coleccion creada desde una busqueda filtrada del explorador.'}</p></div><div class="collection-metrics"><span>${(collection.cards || []).length.toLocaleString()} cartas</span><span>${ownedCount.toLocaleString()} tengo</span><span>${missingCount.toLocaleString()} me faltan</span></div><button class="action-btn primary" type="button" data-open-collection-id="${escapeHtml(collection.id)}">Ver detalle</button></article>`;
+  return `<article class="collection-card"><div class="collection-card-main"><p class="eyebrow">Coleccion guardada</p><h3>${escapeHtml(collection.name)}</h3><p class="subtitle">${filterBits.length ? escapeHtml(filterBits.join(' - ')) : 'Coleccion creada desde una busqueda filtrada del explorador.'}</p></div><div class="collection-metrics"><span>${(collection.cards || []).length.toLocaleString()} cartas</span><span>${ownedCount.toLocaleString()} tengo</span><span>${missingCount.toLocaleString()} me faltan</span></div><div class="collection-card-actions"><button class="action-btn primary" type="button" data-open-collection-id="${escapeHtml(collection.id)}">Ver detalle</button><button class="action-btn danger" type="button" data-delete-collection-id="${escapeHtml(collection.id)}">Eliminar coleccion</button></div></article>`;
 }
 
 export function buildCollectionSummaryMarkup(collection) {
@@ -293,5 +343,5 @@ export function buildCollectionDetailCardMarkup(collectionId, card) {
     : card.setSymbol
       ? `<img class="explorer-set-mark explorer-set-symbol" src="${escapeHtml(card.setSymbol)}" alt="Simbolo de ${escapeHtml(card.setLabel)}" />`
       : `<span class="explorer-set-mark explorer-set-fallback" aria-hidden="true">${escapeHtml((card.setCode || 'SET').slice(0, 3))}</span>`;
-  return `<button class="collection-entry ${card.owned ? 'is-owned' : ''}" type="button" aria-pressed="${card.owned ? 'true' : 'false'}" data-toggle-collection-card="${escapeHtml(collectionId)}" data-card-id="${escapeHtml(card.id)}"><div class="collection-entry-art">${buildLazyImage(card.imageSmall, `Carta de ${card.name}`, 'card-art lazy-image')}</div><div class="collection-entry-body"><div class="explorer-card-head"><span class="card-number">#${escapeHtml(card.number)}</span>${setMark}</div><strong class="card-name">${escapeHtml(card.name)}</strong><p class="subtitle collection-entry-set">${escapeHtml(card.setLabel || card.setName || 'Set desconocido')}</p></div></button>`;
+  return `<article class="collection-entry ${card.owned ? 'is-owned' : ''}"><button class="collection-entry-toggle" type="button" aria-pressed="${card.owned ? 'true' : 'false'}" data-toggle-collection-card="${escapeHtml(collectionId)}" data-card-id="${escapeHtml(card.id)}"><div class="collection-entry-art">${buildLazyImage(card.imageSmall, `Carta de ${card.name}`, 'card-art lazy-image')}</div><div class="collection-entry-body"><div class="explorer-card-head"><span class="card-number">#${escapeHtml(card.number)}</span>${setMark}</div><strong class="card-name">${escapeHtml(card.name)}</strong><p class="subtitle collection-entry-set">${escapeHtml(card.setLabel || card.setName || 'Set desconocido')}</p></div></button><div class="collection-entry-footer"><button class="action-btn danger collection-entry-remove" type="button" data-remove-collection-card="${escapeHtml(collectionId)}" data-card-id="${escapeHtml(card.id)}" aria-label="Quitar carta ${escapeHtml(card.name)} de la coleccion">Quitar carta</button></div></article>`;
 }

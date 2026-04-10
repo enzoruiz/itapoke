@@ -110,6 +110,19 @@ export async function addCardToCollection(collectionId, card) {
   return payload.collection || null;
 }
 
+export async function removeCardFromCollection(collectionId, cardId) {
+  const payload = await apiRequest(`/api/collection-card?collectionId=${encodeURIComponent(collectionId)}&cardId=${encodeURIComponent(cardId)}`, {
+    method: 'DELETE'
+  });
+  if (payload.collection) {
+    collectionsCache = sortCollections([
+      ...collectionsCache.filter((collection) => collection.id !== payload.collection.id),
+      payload.collection
+    ]);
+  }
+  return payload.collection || null;
+}
+
 export function clearCollectionsCache() {
   collectionsCache = [];
 }

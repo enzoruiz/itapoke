@@ -244,6 +244,29 @@ async function mockBackendApi(page) {
       return;
     }
 
+    if (url.pathname === '/api/collection-card' && request.method() === 'DELETE') {
+      const collectionId = url.searchParams.get('collectionId') || '';
+      const cardId = url.searchParams.get('cardId') || '';
+      const collection = state.collections.find((entry) => entry.id === collectionId);
+      if (!collection) {
+        await route.fulfill({ status: 404, json: { error: 'Collection not found.' } });
+        return;
+      }
+      if (!collection.cards.some((entry) => entry.id === cardId)) {
+        await route.fulfill({ status: 404, json: { error: 'Collection card not found.' } });
+        return;
+      }
+      const updatedCollection = {
+        ...collection,
+        updatedAt: nowIso(),
+        totalCount: Math.max(collection.cards.length - 1, 0),
+        cards: collection.cards.filter((entry) => entry.id !== cardId)
+      };
+      state.collections = sortedCollections(state.collections.map((entry) => entry.id === collectionId ? updatedCollection : entry));
+      await route.fulfill({ json: { collection: updatedCollection } });
+      return;
+    }
+
     if (url.pathname === '/api/collection-card' && request.method() === 'POST') {
       const collectionId = url.searchParams.get('collectionId') || '';
       const body = parseJsonBody(route);
@@ -437,13 +460,14 @@ test('creates personal collections from explorer filters and tracks owned cards'
   await expect(page.locator('.collection-entry')).toHaveCount(25);
 
   const firstCard = page.locator('.collection-entry').first();
+  const firstToggle = firstCard.locator('.collection-entry-toggle');
   await expect(firstCard).not.toHaveClass(/is-owned/);
   await firstCard.click();
   await expect(firstCard).toHaveClass(/is-owned/);
-  await expect(firstCard).toHaveAttribute('aria-pressed', 'true');
+  await expect(firstToggle).toHaveAttribute('aria-pressed', 'true');
   await firstCard.click();
   await expect(firstCard).not.toHaveClass(/is-owned/);
-  await expect(firstCard).toHaveAttribute('aria-pressed', 'false');
+  await expect(firstToggle).toHaveAttribute('aria-pressed', 'false');
 
   await firstCard.click();
   await expect(firstCard).toHaveClass(/is-owned/);
@@ -478,11 +502,10 @@ test('supports renaming and deleting a collection', async ({ page }) => {
   await page.locator('#collection-name-submit').click();
   await expect(page.locator('#collection-summary')).toContainText('Coleccion final');
 
-  page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain('Vas a borrar la coleccion');
-    await dialog.accept();
-  });
   await page.locator('#collection-delete').click();
+  await expect(page.locator('#collection-delete-modal')).toBeVisible();
+  await expect(page.locator('#collection-delete-title')).toContainText('Coleccion final');
+  await page.locator('#collection-delete-confirm').click();
   await expect(page).toHaveURL(/\/mis-colecciones$/);
   await expect(page.locator('#collections-status')).toContainText('Todavia no creaste ninguna coleccion');
 });
@@ -539,6 +562,35 @@ test('adds a card to an existing collection from the card modal', async ({ page 
   await expect(page.locator('.collection-entry')).toHaveCount(2);
   await expect(page.locator('#collection-cards')).toContainText('Sprigatito');
   await expect(page.locator('#collection-cards')).toContainText('Floragato');
+});
+
+test('removes a card from a collection and deletes a collection from the list', async ({ page }) => {
+  await signInAsTestUser(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /biblioteca de expansiones/i }).click();
+  await page.locator('.expansion-card').first().click();
+  await page.locator('#detail-create-collection').click();
+  await page.locator('#collection-name-input').fill('Coleccion editable');
+  await page.locator('#collection-name-submit').click();
+
+  await expect(page.locator('.collection-entry')).toHaveCount(2);
+  const firstEntry = page.locator('.collection-entry').first();
+  const firstName = await firstEntry.locator('.card-name').textContent();
+  await firstEntry.getByRole('button', { name: /quitar/i }).click();
+  await expect(page.locator('#collection-card-remove-modal')).toBeVisible();
+  await expect(page.locator('#collection-card-remove-name')).toContainText(firstName || '');
+  await page.locator('#collection-card-remove-confirm').click();
+  await expect(page.locator('.collection-entry')).toHaveCount(1);
+  await expect(page.locator('#collection-cards')).not.toContainText(firstName || '');
+
+  await page.locator('#collection-back').click();
+  await expect(page).toHaveURL(/\/mis-colecciones$/);
+  const collectionCard = page.locator('#collections-list .collection-card').filter({ hasText: 'Coleccion editable' }).first();
+  await collectionCard.getByRole('button', { name: /eliminar/i }).click();
+  await expect(page.locator('#collection-delete-modal')).toBeVisible();
+  await expect(page.locator('#collection-delete-name')).toContainText('Coleccion editable');
+  await page.locator('#collection-delete-confirm').click();
+  await expect(page.locator('#collections-list')).not.toContainText('Coleccion editable');
 });
 
 test('opens Mis Colecciones from the main screen', async ({ page }) => {
