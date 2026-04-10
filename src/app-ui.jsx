@@ -174,25 +174,25 @@ export function Modal({ open, children, onBackdropClick }) {
   );
 }
 
-export function PromptModal({ open, kicker, title, copy, confirmLabel, cancelLabel = 'Cancelar', danger = false, children, onClose, onConfirm }) {
+export function PromptModal({ open, kicker, title, copy, confirmLabel, cancelLabel = 'Cancelar', danger = false, children, onClose, onConfirm, modalId = '', closeButtonId = '', confirmButtonId = '' }) {
   if (!open) return null;
   return (
     <div className="modal" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="modal-frame prompt-modal-frame">
-        <article className="modal-card prompt-modal-card">
+        <article className="modal-card prompt-modal-card" id={modalId || undefined}>
           <div className="prompt-form collection-delete-prompt">
             <div className="modal-top">
               <div>
                 <p className="eyebrow">{kicker}</p>
                 <h2>{title}</h2>
               </div>
-              <button className="modal-close" type="button" onClick={onClose}>Cerrar</button>
+              <button className="modal-close" id={closeButtonId || undefined} type="button" onClick={onClose}>Cerrar</button>
             </div>
             <p className="subtitle prompt-copy">{copy}</p>
             {children}
             <div className="prompt-actions">
               <button className="action-btn" type="button" onClick={onClose}>{cancelLabel}</button>
-              <button className={`action-btn ${danger ? 'danger' : 'accent'}`} type="button" onClick={onConfirm}>{confirmLabel}</button>
+              <button className={`action-btn ${danger ? 'danger' : 'accent'}`} id={confirmButtonId || undefined} type="button" onClick={onConfirm}>{confirmLabel}</button>
             </div>
           </div>
         </article>
@@ -345,33 +345,33 @@ export const ExplorerScreen = memo(function ExplorerScreen({
   buildExplorerQuery
 }) {
   return (
-    <section className="explorer">
+    <section className="explorer" id="explorer-panel">
       <div className="explorer-head">
         <div>
           <p className="eyebrow">Explorador de cartas</p>
           <h2>Haz una busqueda afinada y encuentra tu proxima carta favorita</h2>
           <p className="explorer-copy">Combina filtros para aterrizar rapido en una carta concreta o para curiosear entre artistas, rarezas y expansiones sin perder el tono calido de la landing.</p>
         </div>
-        <button className="action-btn" type="button" onClick={() => navigateTo('/')}>Volver al inicio</button>
+        <button className="action-btn" id="explorer-home" type="button" onClick={() => navigateTo('/')}>Volver al inicio</button>
       </div>
 
       <div className="explorer-grid">
-        <label>Nombre o texto de carta<input type="search" placeholder="Charizard, Pikachu, Profesor..." value={explorerFilters.cardQuery} onChange={(event) => setExplorerFilters((current) => ({ ...current, cardQuery: event.target.value }))} /></label>
+        <label>Nombre o texto de carta<input id="card-query" type="search" placeholder="Charizard, Pikachu, Profesor..." value={explorerFilters.cardQuery} onChange={(event) => setExplorerFilters((current) => ({ ...current, cardQuery: event.target.value }))} /></label>
         <label>Expansion<select value={explorerFilters.expansion} onChange={(event) => setExplorerFilters((current) => ({ ...current, expansion: event.target.value }))}><option value="">Cualquier expansion</option>{expansionFilterOptions.map((set) => <option key={set.id} value={set.id}>{`${set.displayName} (${set.code})`}</option>)}</select></label>
-        <label>Artista<input type="search" placeholder="Ken Sugimori, 5ban Graphics..." value={explorerFilters.artist} onChange={(event) => setExplorerFilters((current) => ({ ...current, artist: event.target.value }))} /></label>
-        <label>Clase de carta<select value={explorerFilters.cardKind} onChange={(event) => setExplorerFilters((current) => ({ ...current, cardKind: event.target.value }))}>{CARD_KIND_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}</select></label>
-        <label>Tipo elemental<select value={explorerFilters.element} onChange={(event) => setExplorerFilters((current) => ({ ...current, element: event.target.value }))}>{ELEMENT_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}</select></label>
-        <label>Rareza<input type="search" placeholder="Rare Holo, Common, Illustration Rare..." value={explorerFilters.rarity} onChange={(event) => setExplorerFilters((current) => ({ ...current, rarity: event.target.value }))} /></label>
+        <label>Artista<input id="artist-filter" type="search" placeholder="Ken Sugimori, 5ban Graphics..." value={explorerFilters.artist} onChange={(event) => setExplorerFilters((current) => ({ ...current, artist: event.target.value }))} /></label>
+        <label>Clase de carta<select id="kind-filter" value={explorerFilters.cardKind} onChange={(event) => setExplorerFilters((current) => ({ ...current, cardKind: event.target.value }))}>{CARD_KIND_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}</select></label>
+        <label>Tipo elemental<select id="element-filter" value={explorerFilters.element} onChange={(event) => setExplorerFilters((current) => ({ ...current, element: event.target.value }))}>{ELEMENT_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}</select></label>
+        <label>Rareza<input id="rarity-filter" type="search" placeholder="Rare Holo, Common, Illustration Rare..." value={explorerFilters.rarity} onChange={(event) => setExplorerFilters((current) => ({ ...current, rarity: event.target.value }))} /></label>
       </div>
 
       <div className="explorer-actions">
         <button className="action-btn primary" type="button" onClick={handleRunExplorerSearch}>Buscar cartas</button>
-        <button className="action-btn accent" type="button" disabled={!user || !explorerHasActiveFilters || explorerResult.totalCount === 0} onClick={() => void handleCreateCollection()}>Crear Coleccion</button>
+        <button className="action-btn accent" id="create-collection" type="button" disabled={!user || !explorerHasActiveFilters || explorerResult.totalCount === 0} onClick={() => void handleCreateCollection()}>Crear Coleccion</button>
         <button className="action-btn" type="button" onClick={handleClearFilters}>Limpiar filtros</button>
       </div>
 
       <div>{explorerStatus}</div>
-      <div>
+      <div id="explorer-results">
         {isExplorerLoading ? (
           <ExplorerSkeleton />
         ) : explorerHasActiveFilters && explorerResult.cards.length ? (
@@ -383,12 +383,12 @@ export const ExplorerScreen = memo(function ExplorerScreen({
           </>
         ) : <div className="empty">{explorerHasActiveFilters ? 'No hay cartas que coincidan con los filtros actuales en esta pagina.' : 'Todavia no hiciste una busqueda en vivo.'}</div>}
       </div>
-      {explorerResult.pageCount > 1 && (
+      {explorerHasActiveFilters && (
         <div className="pager">
-          <div>{`Pagina ${explorerResult.page.toLocaleString()} de ${explorerResult.pageCount.toLocaleString()}`}</div>
+          <div id="explorer-page-label">{`Pagina ${explorerResult.page.toLocaleString()} de ${explorerResult.pageCount.toLocaleString()}`}</div>
           <div className="view-toggle">
-            <button className="action-btn" type="button" disabled={explorerResult.page <= 1} onClick={() => navigateTo('/explorer', { query: buildExplorerQuery(explorerFilters, explorerResult.page - 1) })}>Anterior</button>
-            <button className="action-btn" type="button" disabled={explorerResult.page >= explorerResult.pageCount} onClick={() => navigateTo('/explorer', { query: buildExplorerQuery(explorerFilters, explorerResult.page + 1) })}>Siguiente</button>
+            <button className="action-btn" id="explorer-prev" type="button" disabled={explorerResult.page <= 1} onClick={() => navigateTo('/explorer', { query: buildExplorerQuery(explorerFilters, explorerResult.page - 1) })}>Anterior</button>
+            <button className="action-btn" id="explorer-next" type="button" disabled={explorerResult.page >= explorerResult.pageCount} onClick={() => navigateTo('/explorer', { query: buildExplorerQuery(explorerFilters, explorerResult.page + 1) })}>Siguiente</button>
           </div>
         </div>
       )}
@@ -398,7 +398,7 @@ export const ExplorerScreen = memo(function ExplorerScreen({
 
 export const LibraryScreen = memo(function LibraryScreen({ setsStatus, navigateTo, seriesEntries, seriesPage, setSeriesPage, currentSeriesEntry }) {
   return (
-    <section className="library-shell">
+    <section className="library-shell" id="library-shell">
       <div className="library-head">
         <div>
           <p className="eyebrow">Biblioteca de expansiones</p>
@@ -406,8 +406,8 @@ export const LibraryScreen = memo(function LibraryScreen({ setsStatus, navigateT
           <p className="explorer-copy">La biblioteca esta pensada como un mapa visual: cada pagina te muestra una serie y cada logo te lleva al detalle del set para seguir explorando cartas.</p>
         </div>
         <div className="library-head-actions">
-          <div>{setsStatus}</div>
-          <button className="action-btn" type="button" onClick={() => navigateTo('/')}>Volver al inicio</button>
+          <div id="status">{setsStatus}</div>
+          <button className="action-btn" id="library-home" type="button" onClick={() => navigateTo('/')}>Volver al inicio</button>
         </div>
       </div>
       <div className="series-pager" hidden={seriesEntries.length <= 1}>
@@ -463,13 +463,13 @@ export const ExpansionScreen = memo(function ExpansionScreen({
   openCardModal
 }) {
   return (
-    <section className="expansion-detail">
+    <section className="expansion-detail" id="expansion-detail">
       <div className="detail-nav">
         <button className="action-btn" type="button" onClick={() => navigateTo('/library')}>Volver a expansiones</button>
-        <button className="action-btn accent" type="button" disabled={!user || !filteredDetailCards.length} onClick={() => void handleCreateCollectionFromDetail()}>Crear Coleccion</button>
+        <button className="action-btn accent" id="detail-create-collection" type="button" disabled={!user || !filteredDetailCards.length} onClick={() => void handleCreateCollectionFromDetail()}>Crear Coleccion</button>
       </div>
 
-      <article className="detail-hero">
+      <article className="detail-hero detail-region-ready" id="expansion-summary">
         <div className="detail-hero-main">
           <div className="detail-logo-wrap">
             <SetArtwork set={currentSet} className="detail-logo" />
@@ -491,9 +491,9 @@ export const ExpansionScreen = memo(function ExpansionScreen({
       </article>
 
       <div className="detail-filters">
-        <label>Buscar cartas<input type="search" placeholder="Charizard, Pikachu, Rare, Entrenador..." value={detailQuery} onChange={(event) => startUiTransition(() => setDetailQuery(event.target.value))} /></label>
-        <label>Clase de carta<select value={detailKind} onChange={(event) => setDetailKind(event.target.value)}>{CARD_KIND_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}</select></label>
-        <label>Ordenar cartas<select value={detailSort} onChange={(event) => setDetailSort(event.target.value)}><option value="number-asc">Numero ascendente</option><option value="number-desc">Numero descendente</option><option value="name-asc">Nombre A-Z</option></select></label>
+        <label>Buscar cartas<input id="detail-search" type="search" placeholder="Charizard, Pikachu, Rare, Entrenador..." value={detailQuery} onChange={(event) => startUiTransition(() => setDetailQuery(event.target.value))} /></label>
+        <label>Clase de carta<select id="detail-kind-filter" value={detailKind} onChange={(event) => setDetailKind(event.target.value)}>{CARD_KIND_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}</select></label>
+        <label>Ordenar cartas<select id="detail-sort-filter" value={detailSort} onChange={(event) => setDetailSort(event.target.value)}><option value="number-asc">Numero ascendente</option><option value="number-desc">Numero descendente</option><option value="name-asc">Nombre A-Z</option></select></label>
       </div>
 
       <div className="detail-status">
@@ -511,7 +511,7 @@ export const ExpansionScreen = memo(function ExpansionScreen({
         {loadingSetId === currentSet.id && !activeSetCards.length ? (
           <ExpansionSkeleton currentSet={currentSet} />
         ) : filteredDetailCards.length ? (
-          <ol className="poster-grid">
+          <ol className="poster-grid detail-region-ready" id="expansion-cards">
             {filteredDetailCards.map((card, index) => <MemoPosterCard key={card.id} card={card} setId={currentSet.id} eager={index < 12} onHover={schedulePrefetchLargeImage} onOpen={openCardModal} />)}
           </ol>
         ) : <div className="empty">Prueba otro nombre, tipo o criterio de orden.</div>}
@@ -522,7 +522,7 @@ export const ExpansionScreen = memo(function ExpansionScreen({
 
 export const CollectionsScreen = memo(function CollectionsScreen({ user, collectionsStatus, isCollectionsLoading, navigateTo, collectionsWithMetrics, handleDeleteCollection }) {
   return (
-    <section className="collections-shell">
+    <section className="collections-shell" id="collections-shell">
       <div className="library-head collections-head">
         <div>
           <p className="eyebrow">Mis Colecciones</p>
@@ -530,11 +530,11 @@ export const CollectionsScreen = memo(function CollectionsScreen({ user, collect
           <p className="explorer-copy">Cada coleccion nace desde un filtro del explorador y queda guardada para revisar progreso, faltantes y duplicados de interes.</p>
         </div>
         <div className="library-head-actions">
-          <div>{collectionsStatus}</div>
+          <div id="collections-status">{collectionsStatus}</div>
           <button className="action-btn" type="button" onClick={() => navigateTo('/')}>Volver al inicio</button>
         </div>
       </div>
-      <div>
+      <div id="collections-list">
         {!user ? (
           <div className="empty auth-gate"><strong>Mis Colecciones es personal por usuario.</strong><span>Conectate con Google para guardar tu progreso y separar tus listas del resto.</span><GoogleButtonMount user={user} label="Acceder con Google" /></div>
         ) : isCollectionsLoading ? (
@@ -579,14 +579,14 @@ export const CollectionDetailScreen = memo(function CollectionDetailScreen({
   return (
     <section className="collection-detail">
       <div className="detail-nav collection-detail-nav">
-        <button className="action-btn" type="button" onClick={() => navigateTo('/mis-colecciones')}>Volver a Mis Colecciones</button>
+        <button className="action-btn" id="collection-back" type="button" onClick={() => navigateTo('/mis-colecciones')}>Volver a Mis Colecciones</button>
         <div className="collection-detail-actions">
-          <button className="action-btn" type="button" onClick={() => void handleRenameCollection()}>Renombrar</button>
-          <button className="action-btn danger" type="button" onClick={() => void handleDeleteCollection(activeCollection.id, true)}>Eliminar coleccion</button>
+          <button className="action-btn" id="collection-rename" type="button" onClick={() => void handleRenameCollection()}>Renombrar</button>
+          <button className="action-btn danger" id="collection-delete" type="button" onClick={() => void handleDeleteCollection(activeCollection.id, true)}>Eliminar coleccion</button>
         </div>
       </div>
 
-      <article className="detail-hero collection-hero">
+      <article className="detail-hero collection-hero" id="collection-summary">
         <div className="detail-hero-main">
           <div>
             <p className="eyebrow">Coleccion personal</p>
@@ -608,9 +608,9 @@ export const CollectionDetailScreen = memo(function CollectionDetailScreen({
       </article>
 
       <div className="collection-ownership-filters">
-        <button className={`action-btn ${collectionOwnershipFilter === 'all' ? 'active' : ''}`} type="button" aria-pressed={collectionOwnershipFilter === 'all'} onClick={() => setCollectionOwnershipFilter('all')}>Todas</button>
-        <button className={`action-btn ${collectionOwnershipFilter === 'owned' ? 'active' : ''}`} type="button" aria-pressed={collectionOwnershipFilter === 'owned'} onClick={() => setCollectionOwnershipFilter('owned')}>Las tengo</button>
-        <button className={`action-btn ${collectionOwnershipFilter === 'missing' ? 'active' : ''}`} type="button" aria-pressed={collectionOwnershipFilter === 'missing'} onClick={() => setCollectionOwnershipFilter('missing')}>No las tengo</button>
+        <button className={`action-btn ${collectionOwnershipFilter === 'all' ? 'active' : ''}`} id="collection-filter-all" type="button" aria-pressed={collectionOwnershipFilter === 'all'} onClick={() => setCollectionOwnershipFilter('all')}>Todas</button>
+        <button className={`action-btn ${collectionOwnershipFilter === 'owned' ? 'active' : ''}`} id="collection-filter-owned" type="button" aria-pressed={collectionOwnershipFilter === 'owned'} onClick={() => setCollectionOwnershipFilter('owned')}>Las tengo</button>
+        <button className={`action-btn ${collectionOwnershipFilter === 'missing' ? 'active' : ''}`} id="collection-filter-missing" type="button" aria-pressed={collectionOwnershipFilter === 'missing'} onClick={() => setCollectionOwnershipFilter('missing')}>No las tengo</button>
       </div>
 
       <div className="detail-status">
@@ -623,7 +623,7 @@ export const CollectionDetailScreen = memo(function CollectionDetailScreen({
         {isCollectionsLoading ? (
           <CollectionDetailSkeleton />
         ) : visibleCollectionCards.length ? (
-          <div className="collection-card-list">
+          <div className="collection-card-list" id="collection-cards">
             {visibleCollectionCards.map((card) => <MemoCollectionEntry key={card.id} collectionId={activeCollection.id} card={card} onRemove={handleRemoveCollectionCard} onToggleOwned={handleToggleCollectionCard} />)}
           </div>
         ) : <div className="empty">No hay cartas que coincidan con este filtro dentro de la coleccion.</div>}
@@ -634,7 +634,7 @@ export const CollectionDetailScreen = memo(function CollectionDetailScreen({
 
 export const NotFoundScreen = memo(function NotFoundScreen({ navigateTo }) {
   return (
-    <section className="mode-shell not-found-shell">
+    <section className="mode-shell not-found-shell" id="not-found-shell">
       <div className="not-found-copy">
         <p className="eyebrow">404</p>
         <h2>Esta ruta no existe dentro del archivo Pokemon TCG</h2>
@@ -668,16 +668,25 @@ export const CardModal = memo(function CardModal({
   modalCollectionSubmitLabel,
   modalCollectionStatus
 }) {
+  const modalSet = modalCard
+    ? (currentSet || {
+        displayName: modalCard.setName || 'Set desconocido',
+        code: modalCard.setCode || '',
+        logo: modalCard.setLogo || '',
+        symbol: modalCard.setSymbol || ''
+      })
+    : null;
+
   return (
     <Modal open={Boolean(modalCard)} onBackdropClick={(event) => { if (event.target === event.currentTarget) closeModal(); }}>
       {modalCard && (
-        <article className="modal-card">
+        <article className="modal-card" id="card-modal">
           <div className="modal-top">
             <div>
               <p className="eyebrow">Detalle de carta</p>
               <h2>{modalCard.name}</h2>
             </div>
-            <button className="modal-close" type="button" onClick={closeModal}>Cerrar</button>
+            <button className="modal-close" id="modal-close" type="button" onClick={closeModal}>Cerrar</button>
           </div>
           <div className="modal-grid">
             <div className="modal-image-wrap">
@@ -686,13 +695,13 @@ export const CardModal = memo(function CardModal({
               </button>
             </div>
             <div>
-              <p className="subtitle" id="modal-subtitle">{`${currentSet?.displayName || modalCard.setLabel} (${currentSet?.code || modalCard.setCode}) - #${modalCard.number}`}</p>
-              <div className="modal-meta">
-                <div className="modal-set-panel modal-panel-feature"><strong>Expansion</strong><div className="modal-set-panel-body">{currentSet ? <SetArtwork set={currentSet} className="modal-set-image" /> : null}</div></div>
+              <p className="subtitle" id="modal-subtitle">{`${modalSet?.displayName || 'Set desconocido'}${modalSet?.code ? ` (${modalSet.code})` : ''} - #${modalCard.number}`}</p>
+              <div className="modal-meta" id="modal-meta">
+                <div className="modal-set-panel modal-panel-feature"><strong>Expansion</strong><div className="modal-set-panel-body">{modalSet ? <><SetArtwork set={modalSet} className="modal-set-image" /><span className="modal-set-name">{modalSet.displayName}</span></> : null}</div></div>
                 <div className="modal-fact"><strong>Rareza</strong><span>{modalCard.rarity || 'Sin especificar'}</span></div>
                 <div className="modal-fact"><strong>Artista</strong><span>{modalCard.artist || 'Artista no disponible'}</span></div>
               </div>
-              <div className="modal-links">
+              <div className="modal-links" id="modal-links">
                 {(modalCard.imageLarge || modalCard.imageSmall) && <a href={modalCard.imageLarge || modalCard.imageSmall} target="_blank" rel="noreferrer">Abrir imagen completa</a>}
                 {modalCard.tcgplayerUrl && <a className="secondary" href={modalCard.tcgplayerUrl} target="_blank" rel="noreferrer">Ver en TCGplayer</a>}
                 {modalCard.cardmarketUrl && <a className="secondary" href={modalCard.cardmarketUrl} target="_blank" rel="noreferrer">Ver en Cardmarket</a>}
@@ -704,8 +713,8 @@ export const CardModal = memo(function CardModal({
                     {!collections.length ? <option value="">No tienes colecciones</option> : collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
                   </select>
                 </label>
-                <button className="action-btn accent" type="button" disabled={!user || !modalSelectedCollection || modalCardAlreadyAdded || modalCollectionsLoading} onClick={() => void handleAddModalCardToCollection()}>{modalCollectionSubmitLabel}</button>
-                <p className="subtitle modal-collection-status">{modalCollectionStatus || (!user ? 'Inicia sesion para guardar esta carta en una coleccion existente.' : modalCardAlreadyAdded ? `La carta ya esta en "${modalSelectedCollection?.name}".` : modalSelectedCollection ? `La carta se agregara a "${modalSelectedCollection.name}" como pendiente.` : 'Selecciona una coleccion para guardar esta carta.')}</p>
+                <button className="action-btn accent" id="modal-collection-submit" type="button" disabled={!user || !modalSelectedCollection || modalCardAlreadyAdded || modalCollectionsLoading} onClick={() => void handleAddModalCardToCollection()}>{modalCollectionSubmitLabel}</button>
+                <p className="subtitle modal-collection-status" id="modal-collection-status">{modalCollectionStatus || (!user ? 'Inicia sesion para guardar esta carta en una coleccion existente.' : modalCardAlreadyAdded ? `La carta ya esta en "${modalSelectedCollection?.name}".` : modalSelectedCollection ? `La carta se agregara a "${modalSelectedCollection.name}" como pendiente.` : 'Selecciona una coleccion para guardar esta carta.')}</p>
               </div>
             </div>
           </div>

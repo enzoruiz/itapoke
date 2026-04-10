@@ -52,6 +52,7 @@ MONGODB_URI=mongodb+srv://USER:PASSWORD@itapokebd.wmm5sdv.mongodb.net/itapoke?re
 MONGODB_DB_NAME=itapoke
 GOOGLE_CLIENT_ID=tu-client-id.apps.googleusercontent.com
 VITE_GOOGLE_CLIENT_ID=tu-client-id.apps.googleusercontent.com
+VITE_POKEMON_TCG_API_KEY=tu-api-key-opcional-de-pokemontcg
 ```
 
 ## Ejecutar en local
@@ -92,4 +93,5 @@ El frontend usa Vite y redirige `/api/*` al servidor local en `3001`.
 
 - Si la password de MongoDB tiene caracteres especiales, codificala en la URL de `MONGODB_URI`.
 - Si el login falla tras cambiar la configuracion de Google, espera unos minutos y vuelve a probar.
+- `VITE_POKEMON_TCG_API_KEY` es opcional, pero ayuda a evitar limites o bloqueos del API publico de Pokemon TCG.
 - `vercel dev` solo es necesario si quieres replicar mas de cerca el runtime de Vercel.

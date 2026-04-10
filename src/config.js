@@ -5,6 +5,7 @@ export const COLLECTIONS_STORAGE_KEY = 'tcg-pokemon-collections-v1';
 export const AUTH_SESSION_STORAGE_KEY = 'tcg-pokemon-auth-v1';
 export const GOOGLE_IDENTITY_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+export const POKEMON_TCG_API_KEY = import.meta.env.VITE_POKEMON_TCG_API_KEY || '';
 export const DB_NAME = 'tcg-pokemon-cache';
 export const DB_VERSION = 1;
 export const STORE_NAME = 'resources';

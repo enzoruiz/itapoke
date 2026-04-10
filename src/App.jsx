@@ -834,6 +834,8 @@ export function App() {
 
       <PromptModal
         open={Boolean(deletePrompt)}
+        modalId="collection-delete-modal"
+        confirmButtonId="collection-delete-confirm"
         kicker="Eliminar coleccion"
         title={deletePrompt ? `Vas a borrar "${deletePrompt.collection.name}"` : ''}
         copy={deletePrompt ? `Se eliminaran ${Number(deletePrompt.collection.cards?.length || 0).toLocaleString()} cartas guardadas y esta accion no se puede deshacer.` : ''}
@@ -850,11 +852,13 @@ export function App() {
           resolve?.(true);
         }}
       >
-        {deletePrompt && <div className="detail-fact collection-delete-fact"><span>Coleccion</span><strong>{deletePrompt.collection.name}</strong></div>}
+        {deletePrompt && <div className="detail-fact collection-delete-fact"><span>Coleccion</span><strong id="collection-delete-title"><span id="collection-delete-name">{deletePrompt.collection.name}</span></strong></div>}
       </PromptModal>
 
       <PromptModal
         open={Boolean(removePrompt)}
+        modalId="collection-card-remove-modal"
+        confirmButtonId="collection-card-remove-confirm"
         kicker="Quitar carta"
         title={removePrompt ? `Quitar "${removePrompt.card.name}"` : ''}
         copy={removePrompt ? `La carta se quitara de la coleccion "${removePrompt.collection.name}" y dejara de contarse en su progreso.` : ''}
@@ -871,7 +875,7 @@ export function App() {
           resolve?.(true);
         }}
       >
-        {removePrompt && <div className="detail-fact collection-delete-fact"><span>Carta</span><strong>{removePrompt.card.name}</strong></div>}
+        {removePrompt && <div className="detail-fact collection-delete-fact"><span>Carta</span><strong id="collection-card-remove-name">{removePrompt.card.name}</strong></div>}
       </PromptModal>
     </>
   );
@@ -893,7 +897,7 @@ function NamePromptModal({ prompt, onResolve }) {
   return (
     <div className="modal" onClick={(event) => { if (event.target === event.currentTarget) onResolve(null); }}>
       <div className="modal-frame prompt-modal-frame">
-        <article className="modal-card prompt-modal-card">
+        <article className="modal-card prompt-modal-card" id="collection-name-modal">
           <form className="prompt-form" onSubmit={async (event) => {
             event.preventDefault();
             setSubmitError('');
@@ -915,7 +919,7 @@ function NamePromptModal({ prompt, onResolve }) {
             <p className="subtitle prompt-copy">{prompt.copy}</p>
             <label>
               Nombre de la coleccion
-              <input name="collectionName" type="text" maxLength="80" placeholder="Mis favoritas de Scarlet and Violet" value={value} onChange={(event) => setValue(event.target.value)} disabled={isSubmitting} />
+              <input id="collection-name-input" name="collectionName" type="text" maxLength="80" placeholder="Mis favoritas de Scarlet and Violet" value={value} onChange={(event) => setValue(event.target.value)} disabled={isSubmitting} />
             </label>
             {isSubmitting && (
               <div className="prompt-loader" aria-live="polite">
@@ -926,7 +930,7 @@ function NamePromptModal({ prompt, onResolve }) {
             {submitError ? <p className="subtitle prompt-error">{submitError}</p> : null}
             <div className="prompt-actions">
               <button className="action-btn" type="button" onClick={() => onResolve(null)} disabled={isSubmitting}>Cancelar</button>
-              <button className="action-btn accent" type="submit" disabled={isSubmitting}>{isSubmitting ? `${prompt.loadingLabel || 'Guardando'}...` : prompt.submitLabel}</button>
+              <button className="action-btn accent" id="collection-name-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? `${prompt.loadingLabel || 'Guardando'}...` : prompt.submitLabel}</button>
             </div>
           </form>
         </article>

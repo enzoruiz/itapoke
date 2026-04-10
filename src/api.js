@@ -1,4 +1,4 @@
-import { API_BASE, CARD_FIELDS, PAGE_SIZE, SET_FIELDS } from './config.js';
+import { API_BASE, CARD_FIELDS, PAGE_SIZE, POKEMON_TCG_API_KEY, SET_FIELDS } from './config.js';
 import { normalizeCard, normalizeSet, isIncludedExpansion, compareCardNumbers, buildContainsClause, sanitizeQueryValue } from './utils.js';
 
 function buildExplorerClauses(filters) {
@@ -13,7 +13,9 @@ function buildExplorerClauses(filters) {
 }
 
 export async function fetchJson(url, { signal } = {}) {
-  const response = await fetch(url, { signal, headers: { 'User-Agent': 'OpenCode Pokemon TCG Browser' } });
+  const headers = { Accept: 'application/json' };
+  if (POKEMON_TCG_API_KEY) headers['X-Api-Key'] = POKEMON_TCG_API_KEY;
+  const response = await fetch(url, { signal, headers });
   if (!response.ok) throw new Error('Request failed (' + response.status + ') for ' + url);
   return response.json();
 }

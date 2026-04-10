@@ -340,6 +340,37 @@ test.beforeEach(async ({ page }) => {
   await mockPokemonApi(page);
 });
 
+test('loads expansions from Pokemon TCG API without restricted browser headers', async ({ page }) => {
+  let setsRequestHeaders = null;
+
+  await page.route('https://api.pokemontcg.io/v2/sets**', async (route) => {
+    setsRequestHeaders = route.request().headers();
+    await route.fulfill({ json: setsPayload });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /biblioteca de expansiones/i }).click();
+
+  await expect(page.locator('#status')).toContainText('Mostrando 2 expansiones');
+  expect(setsRequestHeaders).toBeTruthy();
+  expect(setsRequestHeaders?.['user-agent'] || '').not.toContain('OpenCode Pokemon TCG Browser');
+  expect(setsRequestHeaders).not.toHaveProperty('x-api-key');
+  expect(setsRequestHeaders?.accept || '').toContain('application/json');
+});
+
+test('shows a friendly error when expansions API fails', async ({ page }) => {
+  await page.route('https://api.pokemontcg.io/v2/sets**', async (route) => {
+    await route.fulfill({ status: 500, json: { error: 'Upstream failure' } });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /biblioteca de expansiones/i }).click();
+
+  await expect(page.locator('#status')).toContainText('No se pudieron cargar las expansiones desde la API.');
+  await expect(page.locator('.error')).toContainText('No se pudieron cargar las expansiones desde la API.');
+  await expect(page.locator('.expansion-card')).toHaveCount(0);
+});
+
 test('renders expansion library and opens a set detail', async ({ page }) => {
   await page.goto('/');
 
@@ -352,8 +383,10 @@ test('renders expansion library and opens a set detail', async ({ page }) => {
   await expect(page).toHaveURL(/\/expansion\/scarlet-and-violet\/scarlet-and-violet\/sv1$/);
   expect(page.url()).not.toContain('#');
   await expect(page.locator('#expansion-detail')).toBeVisible();
+  await expect(page.locator('#expansion-summary')).toBeVisible();
   await expect(page.locator('#expansion-summary')).toContainText('Scarlet and Violet');
   await expect(page.locator('#expansion-cards .poster-item')).toHaveCount(2);
+  await expect(page.locator('#expansion-cards .poster-item').first()).toBeVisible();
 
   await page.locator('#detail-search').fill('Floragato');
   await expect(page).toHaveURL(/\/expansion\/scarlet-and-violet\/scarlet-and-violet\/sv1\?q=Floragato$/);
@@ -407,6 +440,7 @@ test('shows simplified modal details and no zoom helper text', async ({ page }) 
   await expect(page.locator('#card-modal')).toBeVisible();
   await expect(page.locator('#modal-subtitle')).toContainText('Scarlet and Violet (SVI) - #1');
   await expect(page.locator('.modal-set-image')).toBeVisible();
+  await expect(page.locator('.modal-set-panel')).toContainText('Scarlet and Violet');
   await expect(page.locator('#modal-meta')).toContainText('Rareza');
   await expect(page.locator('#modal-meta')).toContainText('Artista');
   await expect(page.locator('#modal-meta')).not.toContainText('HP');
