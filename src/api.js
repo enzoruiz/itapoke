@@ -1,5 +1,5 @@
 import { API_BASE, CARD_FIELDS, PAGE_SIZE, POKEMON_TCG_API_KEY, SET_FIELDS } from './config.js';
-import { normalizeCard, normalizeSet, isIncludedExpansion, compareCardNumbers, buildContainsClause, sanitizeQueryValue } from './utils.js';
+import { normalizeCard, normalizeSet, compareCardNumbers, buildContainsClause, sanitizeQueryValue } from './utils.js';
 
 function buildExplorerClauses(filters) {
   const clauses = [];
@@ -23,7 +23,7 @@ export async function fetchJson(url, { signal } = {}) {
 export async function fetchSetsFromApi(signal) {
   const params = new URLSearchParams({ orderBy: 'releaseDate', select: SET_FIELDS });
   const json = await fetchJson(`${API_BASE}/sets?${params.toString()}`, { signal });
-  return json.data.filter(isIncludedExpansion).map(normalizeSet);
+  return json.data.map(normalizeSet);
 }
 
 export async function fetchCardsForSetFromApi(setId, signal) {
@@ -52,23 +52,19 @@ export async function fetchExplorerPageFromApi(filters, setLookup, page, signal)
   const clauses = buildExplorerClauses(filters);
   if (!clauses.length) return null;
 
-  const params = new URLSearchParams({
-    q: clauses.join(' '),
-    orderBy: 'set.releaseDate,name',
-    page: String(Math.max(page, 1)),
-    pageSize: String(PAGE_SIZE),
-    select: CARD_FIELDS
-  });
-  const json = await fetchJson(`${API_BASE}/cards?${params.toString()}`, { signal });
-  const cards = (json.data || []).map(normalizeCard).filter((card) => setLookup.has(card.setId));
-  const pageCount = json.pageCount || Math.max(1, Math.ceil((json.totalCount || json.count || 0) / (json.pageSize || PAGE_SIZE)));
+  const allCards = await fetchAllExplorerCardsFromApi(filters, setLookup, signal);
+
+  const totalCount = allCards.length;
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), pageCount);
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+  const cards = allCards.slice(startIndex, startIndex + PAGE_SIZE);
 
   return {
     cards,
     page: safePage,
     pageCount,
-    totalCount: json.totalCount || json.count || cards.length
+    totalCount
   };
 }
 

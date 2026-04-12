@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(npx vite:*)",
+      "Bash(grep -rn \"auth/google\\\\|auth\\\\\\\\\\\\\\\\google\" D:/enzo-projects/tcg-pokemon/api)",
+      "Bash(ls -la D:/enzo-projects/tcg-pokemon/.env*)",
+      "Bash(node scripts/local-api-server.mjs)",
+      "Bash(curl -i -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d '{\"credential\":\"test-bad-token\"}')",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(node -e ':*)",
+      "Bash(node -e \"import\\('./api/auth/google.js'\\).then\\(m => console.log\\('import OK, default:', typeof m.default\\)\\);\")",
+      "Bash(curl -s -o /tmp/r1.txt -w \"status=%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d '{}')",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /tmp/r2.txt -w \"status=%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d '{\"credential\":\"garbage\"}')",
+      "Bash(curl -s -o /tmp/r3.txt -w \"status=%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d 'not-json')"
+    ]
+  }
+}

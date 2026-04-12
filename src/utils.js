@@ -1,35 +1,7 @@
-import { EXCLUDED_NAME_PATTERNS, OTHER_SERIES_ALLOWED, SPECIAL_SET_NAMES, TODAY } from './config.js';
+import { SPECIAL_SET_NAMES } from './config.js';
 
 export function normalizeAscii(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
-export function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-export function releaseDateToDate(value) {
-  return new Date(String(value).replace(/\//g, '-') + 'T00:00:00Z');
-}
-
-export function isFutureSet(set) {
-  return releaseDateToDate(set.releaseDate) > TODAY;
-}
-
-export function isExcludedByName(name) {
-  return EXCLUDED_NAME_PATTERNS.some((pattern) => pattern.test(name));
-}
-
-export function isIncludedExpansion(set) {
-  const asciiName = normalizeAscii(set.name);
-  if (isFutureSet(set) || isExcludedByName(asciiName)) return false;
-  if (set.series === 'Other') return OTHER_SERIES_ALLOWED.has(asciiName);
-  return true;
 }
 
 export function classifySet(set) {

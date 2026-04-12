@@ -444,7 +444,12 @@ test('shows simplified modal details and no zoom helper text', async ({ page }) 
   await expect(page.locator('#modal-meta')).toContainText('Rareza');
   await expect(page.locator('#modal-meta')).toContainText('Artista');
   await expect(page.locator('#modal-meta')).not.toContainText('HP');
-  await expect(page.locator('#modal-meta')).not.toContainText('Supertype');
+  await expect(page.locator('#modal-meta')).not.toContainText('Clase');
+  await expect(page.locator('#modal-meta')).not.toContainText('Tipos');
+  await expect(page.locator('#modal-meta')).not.toContainText('Evoluciona de');
+  await expect(page.locator('#modal-meta')).not.toContainText('Subtipos');
+  await expect(page.locator('#modal-meta')).not.toContainText('Set');
+  await expect(page.locator('.modal-ownership-panel')).toContainText('Aun no esta guardada');
   await expect(page.locator('.modal-zoom-note')).toHaveCount(0);
   await expect(page.locator('#modal-links a')).toHaveCount(3);
 });
@@ -498,6 +503,7 @@ test('resets explorer filters and results after navigating away and back', async
   await expect(page).toHaveURL(/\/explorer$/);
   await expect(page.locator('#card-query')).toHaveValue('');
   await expect(page.locator('#explorer-results')).toContainText('Todavia no hiciste una busqueda en vivo.');
+  await expect(page.getByText('Elige al menos un filtro para ejecutar una busqueda en vivo.')).toHaveCount(0);
   await expect(page.locator('.card-list .card-item')).toHaveCount(0);
 });
 
