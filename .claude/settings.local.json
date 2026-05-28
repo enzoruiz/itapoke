@@ -14,7 +14,9 @@
       "Bash(curl -s -o /tmp/r1.txt -w \"status=%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d '{}')",
       "Read(//tmp/**)",
       "Bash(curl -s -o /tmp/r2.txt -w \"status=%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d '{\"credential\":\"garbage\"}')",
-      "Bash(curl -s -o /tmp/r3.txt -w \"status=%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d 'not-json')"
+      "Bash(curl -s -o /tmp/r3.txt -w \"status=%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/google -H \"Content-Type: application/json\" -d 'not-json')",
+      "Bash(git *)",
+      "Bash(npm run *)"
     ]
   }
 }

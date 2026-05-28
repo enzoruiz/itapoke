@@ -2,13 +2,13 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransit
 import { fetchAllExplorerCardsFromApi } from './api.js';
 import { getAuthSession, initializeAuth, setAuthChangeHandler } from './auth.js';
 import { restoreUiState, saveUiState } from './cache.js';
-import { addCardToCollection, createCollection, deleteCollection, getCollection, removeCardFromCollection, renameCollection, updateCollectionCardOwnership } from './collections.js';
+import { createCollection, deleteCollection, getCollection, removeCardFromCollection, renameCollection, updateCollectionCardOwnership } from './collections.js';
 import { buildSeriesEntries, compareSetsByNewest, enrichCardWithSet } from './app-data.js';
 import { collectionCardExists, collectionFiltersSummary, collectionNameFromFilters, detailCollectionFiltersSummary, detailCollectionName, filterCollectionCards, normalizeCollectionCards } from './app-collections.js';
-import { buildCollectionQuery, buildDetailQuery, buildExplorerFilterChips, buildExplorerQuery, compareDetailCards, DEFAULT_DETAIL_SORT, DEFAULT_EXPLORER_SORT, DEFAULT_HOME_MODE, getHomeModeCaption, hasActiveFilters, parseCollectionQuery, parseDetailQuery, parseExplorerQuery, sortExplorerCards } from './app-query.js';
+import { buildCollectionQuery, buildDetailQuery, compareDetailCards, DEFAULT_DETAIL_SORT, DEFAULT_HOME_MODE, getHomeModeCaption, parseCollectionQuery, parseDetailQuery, sortExplorerCards } from './app-query.js';
 import { collectionPath, expansionPath, routeCollectionId, routeScreen, routeSetId } from './app-routing.js';
 import { AuthBar, CardModal, CollectionsScreen, CollectionDetailScreen, ExpansionScreen, ExplorerScreen, LandingScreen, LibraryScreen, NamePromptModal, NotFoundScreen, PromptModal } from './app-ui.jsx';
-import { useCardModalControls, useCollectionsData, useExplorerSearch, useLocationState, useSetCards, useSetCatalog } from './app-hooks.js';
+import { useCardModalControls, useCollectionPrompts, useCollectionsData, useExplorerSearch, useExplorerState, useLocationState, useModalCollections, useSetCards, useSetCatalog } from './app-hooks.js';
 import { debounce } from './utils.js';
 
 export function App() {
@@ -25,15 +25,7 @@ export function App() {
   const [detailKind, setDetailKind] = useState(restoredUiState.detailKind || '');
   const [detailSort, setDetailSort] = useState(restoredUiState.detailSort || DEFAULT_DETAIL_SORT);
   const [user, setUser] = useState(getAuthSession());
-  const [explorerFilters, setExplorerFilters] = useState(() => parseExplorerQuery(location.search).filters);
-  const [explorerSort, setExplorerSort] = useState(() => parseExplorerQuery(location.search).sort || DEFAULT_EXPLORER_SORT);
   const [collectionOwnershipFilter, setCollectionOwnershipFilter] = useState('all');
-  const [modalCollectionSelection, setModalCollectionSelection] = useState('');
-  const [modalCollectionStatus, setModalCollectionStatus] = useState('');
-  const [modalCollectionsLoading, setModalCollectionsLoading] = useState(false);
-  const [namePrompt, setNamePrompt] = useState(null);
-  const [deletePrompt, setDeletePrompt] = useState(null);
-  const [removePrompt, setRemovePrompt] = useState(null);
   const [isPending, startUiTransition] = useTransition();
 
   const deferredDetailQuery = useDeferredValue(detailQuery);
@@ -41,6 +33,21 @@ export function App() {
   const setLookup = useMemo(() => new Map(sets.map((set) => [set.id, set])), [sets]);
   const expansionFilterOptions = useMemo(() => [...sets].sort(compareSetsByNewest), [sets]);
   const seriesEntries = useMemo(() => buildSeriesEntries([...sets].sort(compareSetsByNewest)), [sets]);
+
+  const {
+    explorerFilters,
+    setExplorerFilters,
+    explorerSort,
+    setExplorerSort,
+    explorerHasActiveFilters,
+    hasPendingExplorerChanges,
+    explorerActiveFilterChips,
+    handleRunExplorerSearch,
+    handleClearFilters,
+    handleRemoveExplorerFilter,
+    handleApplyExplorerPreset,
+  } = useExplorerState({ location, navigateTo, expansionFilterOptions });
+
   const filteredSeriesEntries = useMemo(() => {
     const query = seriesQuery.trim().toLowerCase();
     if (!query) return seriesEntries;
@@ -51,6 +58,7 @@ export function App() {
       ])
       .filter(([, groupSets]) => groupSets.length);
   }, [seriesEntries, seriesQuery]);
+
   const currentSeriesEntry = useMemo(
     () => filteredSeriesEntries[Math.max(0, Math.min(seriesPage - 1, Math.max(filteredSeriesEntries.length - 1, 0)))] || null,
     [filteredSeriesEntries, seriesPage]
@@ -59,18 +67,6 @@ export function App() {
   const currentSet = activeSetId ? setLookup.get(activeSetId) || null : null;
   const { cardsBySet, loadingSetId } = useSetCards(currentSet);
   const activeSetCards = currentSet ? cardsBySet.get(currentSet.id) || [] : [];
-  const explorerHasActiveFilters = hasActiveFilters(explorerFilters);
-  const appliedExplorerState = useMemo(() => parseExplorerQuery(location.search), [location.search]);
-  const hasPendingExplorerChanges = useMemo(() => {
-    const appliedFilters = appliedExplorerState.filters;
-    return explorerSort !== (appliedExplorerState.sort || DEFAULT_EXPLORER_SORT)
-      || explorerFilters.cardQuery !== appliedFilters.cardQuery
-      || explorerFilters.expansion !== appliedFilters.expansion
-      || explorerFilters.artist !== appliedFilters.artist
-      || explorerFilters.cardKind !== appliedFilters.cardKind
-      || explorerFilters.element !== appliedFilters.element
-      || explorerFilters.rarity !== appliedFilters.rarity;
-  }, [appliedExplorerState, explorerFilters, explorerSort]);
   const { explorerResult, explorerStatus, isExplorerLoading } = useExplorerSearch({ screen, locationSearch: location.search, setLookup });
   const {
     collections,
@@ -81,6 +77,9 @@ export function App() {
     mergeCollectionIntoState,
     removeCollectionFromState
   } = useCollectionsData({ user, screen, activeCollectionId });
+
+  const { namePrompt, setNamePrompt, deletePrompt, setDeletePrompt, removePrompt, setRemovePrompt, requestCollectionName, requestCollectionDeletion, requestCollectionCardRemoval } = useCollectionPrompts();
+
   const {
     modalState,
     modalImageButtonRef,
@@ -93,8 +92,28 @@ export function App() {
     handleZoomWheel
   } = useCardModalControls({ cardsBySet, explorerCards: explorerResult.cards });
 
-  const activeCollection = useMemo(() => collections.find((entry) => entry.id === activeCollectionId) || null, [collections, activeCollectionId]);
   const enrichCard = useCallback((card) => enrichCardWithSet(card, setLookup.get(card.setId) || null), [setLookup]);
+
+  const activeCollection = useMemo(() => collections.find((entry) => entry.id === activeCollectionId) || null, [collections, activeCollectionId]);
+
+  const modalCard = useMemo(() => {
+    if (!modalState.setId || !modalState.cardId) return null;
+    const fromSet = (cardsBySet.get(modalState.setId) || []).find((card) => card.id === modalState.cardId);
+    if (fromSet) return enrichCard(fromSet);
+    const fromExplorer = explorerResult.cards.find((card) => card.id === modalState.cardId && card.setId === modalState.setId);
+    return fromExplorer ? enrichCard(fromExplorer) : null;
+  }, [cardsBySet, enrichCard, explorerResult.cards, modalState.cardId, modalState.setId]);
+
+  const {
+    modalCollectionSelection,
+    setModalCollectionSelection,
+    modalCollectionStatus,
+    modalCollectionsLoading,
+    handleAddModalCardToCollection,
+    modalSelectedCollection,
+    modalCardAlreadyAdded,
+    modalCollectionSubmitLabel,
+  } = useModalCollections({ modalCard, user, collections, enrichCard, refreshCollections });
 
   const filteredDetailCards = useMemo(() => {
     const query = deferredDetailQuery.trim().toLowerCase();
@@ -107,9 +126,14 @@ export function App() {
       .sort((left, right) => compareDetailCards(detailSort, left, right));
   }, [activeSetCards, deferredDetailQuery, detailKind, detailSort]);
 
-  const explorerActiveFilterChips = useMemo(() => buildExplorerFilterChips(explorerFilters, expansionFilterOptions), [explorerFilters, expansionFilterOptions]);
-  const explorerCardsWithSet = useMemo(() => sortExplorerCards(explorerResult.cards.map((card) => enrichCard(card)), explorerSort, setLookup), [enrichCard, explorerResult.cards, explorerSort, setLookup]);
-  const visibleCollectionCards = useMemo(() => filterCollectionCards(activeCollection?.cards || [], collectionOwnershipFilter), [activeCollection, collectionOwnershipFilter]);
+  const explorerCardsWithSet = useMemo(
+    () => sortExplorerCards(explorerResult.cards.map((card) => enrichCard(card)), explorerSort, setLookup),
+    [enrichCard, explorerResult.cards, explorerSort, setLookup]
+  );
+  const visibleCollectionCards = useMemo(
+    () => filterCollectionCards(activeCollection?.cards || [], collectionOwnershipFilter),
+    [activeCollection, collectionOwnershipFilter]
+  );
   const homeCaption = getHomeModeCaption(homeMode);
 
   const collectionsWithMetrics = useMemo(() => collections.map((collection) => {
@@ -123,6 +147,7 @@ export function App() {
     const completionPercent = cardsCount ? Math.round((ownedCount / cardsCount) * 100) : 0;
     return { collection, ownedCount, missingCount, filterBits, cardsCount, completionPercent };
   }), [collections]);
+
   const activeCollectionFilterBits = useMemo(
     () => Object.entries(activeCollection?.filters || {}).filter(([, value]) => String(value || '').trim()),
     [activeCollection]
@@ -132,14 +157,6 @@ export function App() {
     const ownedCount = cards.filter((card) => card.owned).length;
     return { total: cards.length, ownedCount, missingCount: Math.max(cards.length - ownedCount, 0) };
   }, [activeCollection]);
-
-  const modalCard = useMemo(() => {
-    if (!modalState.setId || !modalState.cardId) return null;
-    const fromSet = (cardsBySet.get(modalState.setId) || []).find((card) => card.id === modalState.cardId);
-    if (fromSet) return enrichCard(fromSet);
-    const fromExplorer = explorerResult.cards.find((card) => card.id === modalState.cardId && card.setId === modalState.setId);
-    return fromExplorer ? enrichCard(fromExplorer) : null;
-  }, [cardsBySet, enrichCard, explorerResult.cards, modalState.cardId, modalState.setId]);
 
   const modalCardCollections = useMemo(() => {
     if (!modalCard) return [];
@@ -156,15 +173,7 @@ export function App() {
   const modalNextCard = modalIndex >= 0 && modalIndex < modalSequence.length - 1 ? modalSequence[modalIndex + 1] : null;
 
   useEffect(() => {
-    saveUiState({
-      homeMode,
-      activeSetId,
-      detailQuery,
-      detailKind,
-      detailSort,
-      seriesPage,
-      seriesQuery
-    });
+    saveUiState({ homeMode, activeSetId, detailQuery, detailKind, detailSort, seriesPage, seriesQuery });
   }, [activeSetId, detailKind, detailQuery, detailSort, homeMode, seriesPage, seriesQuery]);
 
   useEffect(() => {
@@ -172,12 +181,6 @@ export function App() {
     if (screen === 'collections') setHomeMode('collections');
     if (screen === 'library' || screen === 'expansion') setHomeMode('library');
   }, [screen]);
-
-  useEffect(() => {
-    const { filters, sort } = parseExplorerQuery(location.search);
-    setExplorerFilters(filters);
-    setExplorerSort(sort || DEFAULT_EXPLORER_SORT);
-  }, [location.search]);
 
   useEffect(() => {
     if (screen !== 'expansion') return;
@@ -193,15 +196,11 @@ export function App() {
   }, [activeCollectionId, location.search, screen]);
 
   useEffect(() => {
-    if (seriesPage > Math.max(filteredSeriesEntries.length, 1)) {
-      setSeriesPage(1);
-    }
+    if (seriesPage > Math.max(filteredSeriesEntries.length, 1)) setSeriesPage(1);
   }, [filteredSeriesEntries.length, seriesPage]);
 
   useEffect(() => {
-    setAuthChangeHandler((session) => {
-      setUser(session);
-    });
+    setAuthChangeHandler((session) => setUser(session));
     void initializeAuth();
     return () => setAuthChangeHandler(() => {});
   }, []);
@@ -211,23 +210,6 @@ export function App() {
     if (setLookup.has(activeSetId)) return;
     navigateTo('/library', { replace: true });
   }, [activeSetId, navigateTo, screen, setLookup, sets.length]);
-
-  useEffect(() => {
-    if (!modalCard || !user) return;
-    setModalCollectionsLoading(true);
-    setModalCollectionStatus('Cargando tus colecciones...');
-    void refreshCollections(false)
-      .then((nextCollections) => {
-        const preferred = nextCollections.find((collection) => !collectionCardExists(collection, modalCard.id));
-        setModalCollectionSelection(preferred?.id || nextCollections[0]?.id || '');
-        setModalCollectionStatus('');
-      })
-      .catch((error) => {
-        console.error(error);
-        setModalCollectionStatus('No se pudieron cargar tus colecciones ahora mismo.');
-      })
-      .finally(() => setModalCollectionsLoading(false));
-  }, [modalCard, refreshCollections, user]);
 
   const updateExpansionRoute = useCallback((setId, detailState, replace = false) => {
     const set = setLookup.get(setId);
@@ -244,34 +226,6 @@ export function App() {
     if (screen !== 'expansion' || !activeSetId) return;
     debouncedDetailRouteSync(detailQuery, detailKind, detailSort, activeSetId);
   }, [activeSetId, debouncedDetailRouteSync, detailKind, detailQuery, detailSort, screen]);
-
-  const requestCollectionName = useCallback((config) => new Promise((resolve) => setNamePrompt({ ...config, resolve })), []);
-  const requestCollectionDeletion = useCallback((collection) => new Promise((resolve) => setDeletePrompt({ collection, resolve })), []);
-  const requestCollectionCardRemoval = useCallback((collection, card) => new Promise((resolve) => setRemovePrompt({ collection, card, resolve })), []);
-
-  const handleRunExplorerSearch = useCallback(() => {
-    navigateTo('/explorer', { query: buildExplorerQuery(explorerFilters, 1, explorerSort) });
-  }, [explorerFilters, explorerSort, navigateTo]);
-
-  const handleClearFilters = useCallback(() => {
-    setExplorerFilters({ cardQuery: '', expansion: '', artist: '', cardKind: '', element: '', rarity: '' });
-    setExplorerSort(DEFAULT_EXPLORER_SORT);
-    navigateTo('/explorer', { replace: true });
-  }, [navigateTo]);
-
-  const handleRemoveExplorerFilter = useCallback((key) => {
-    const nextFilters = { ...explorerFilters, [key]: '' };
-    setExplorerFilters(nextFilters);
-  }, [explorerFilters]);
-
-  const handleApplyExplorerPreset = useCallback((preset) => {
-    const nextFilters = { cardQuery: '', expansion: '', artist: '', cardKind: '', element: '', rarity: '', ...preset };
-    setExplorerFilters(nextFilters);
-  }, []);
-
-  const handleExplorerSortChange = useCallback((nextSort) => {
-    setExplorerSort(nextSort);
-  }, []);
 
   const handleCreateCollection = useCallback(async () => {
     const chosenName = await requestCollectionName({
@@ -293,7 +247,6 @@ export function App() {
           updatedAt: new Date().toISOString()
         };
         mergeCollectionIntoState(optimisticCollection);
-
         try {
           const collection = await createCollection({
             name: collectionName,
@@ -310,7 +263,6 @@ export function App() {
         }
       }
     });
-
     if (chosenName === null || !chosenName.trim()) return;
   }, [enrichCard, expansionFilterOptions, explorerFilters, mergeCollectionIntoState, navigateTo, removeCollectionFromState, requestCollectionName, setLookup]);
 
@@ -334,7 +286,6 @@ export function App() {
           updatedAt: new Date().toISOString()
         };
         mergeCollectionIntoState(optimisticCollection);
-
         try {
           const collection = await createCollection({
             name: collectionName,
@@ -366,7 +317,6 @@ export function App() {
       onSubmit: async (collectionName) => {
         const previousCollection = activeCollection;
         mergeCollectionIntoState({ ...activeCollection, name: collectionName, updatedAt: new Date().toISOString() });
-
         try {
           const renamedCollection = await renameCollection(activeCollection.id, collectionName);
           mergeCollectionIntoState(renamedCollection);
@@ -440,30 +390,6 @@ export function App() {
     }
   }, [collections, mergeCollectionIntoState]);
 
-  const handleAddModalCardToCollection = useCallback(async () => {
-    if (!modalCard || !modalCollectionSelection) return;
-    const collection = collections.find((entry) => entry.id === modalCollectionSelection);
-    if (!collection || collectionCardExists(collection, modalCard.id)) return;
-    setModalCollectionStatus(`Agregando la carta a "${collection.name}"...`);
-    try {
-      await addCardToCollection(collection.id, normalizeCollectionCards([modalCard], enrichCard)[0]);
-      await refreshCollections(true);
-      setModalCollectionStatus(`Carta agregada a "${collection.name}".`);
-    } catch (error) {
-      if (error?.status === 409) {
-        await refreshCollections(true);
-        setModalCollectionStatus(`La carta ya estaba guardada en "${collection.name}".`);
-        return;
-      }
-      console.error(error);
-      setModalCollectionStatus('No se pudo agregar la carta a esta coleccion.');
-    }
-  }, [collections, enrichCard, modalCard, modalCollectionSelection, refreshCollections]);
-
-  const modalSelectedCollection = collections.find((entry) => entry.id === modalCollectionSelection) || null;
-  const modalCardAlreadyAdded = modalSelectedCollection && modalCard ? collectionCardExists(modalSelectedCollection, modalCard.id) : false;
-  const modalCollectionSubmitLabel = modalCollectionsLoading ? 'Agregando...' : modalCardAlreadyAdded ? 'Ya agregada' : 'Agregar a coleccion';
-
   const handleCollectionOwnershipFilterChange = useCallback((nextFilter) => {
     setCollectionOwnershipFilter(nextFilter);
     if (!activeCollection) return;
@@ -477,7 +403,6 @@ export function App() {
   const openSiblingCard = useCallback((entry) => {
     if (!entry) return;
     openCardModal(entry.setId, entry.id, modalState.source);
-    setModalCollectionStatus('');
   }, [modalState.source, openCardModal]);
 
   return (
@@ -487,7 +412,7 @@ export function App() {
 
         {screen === 'landing' && <LandingScreen homeMode={homeMode} homeCaption={homeCaption} navigateTo={navigateTo} />}
 
-        {screen === 'explorer' && <ExplorerScreen navigateTo={navigateTo} explorerFilters={explorerFilters} setExplorerFilters={setExplorerFilters} expansionFilterOptions={expansionFilterOptions} handleRunExplorerSearch={handleRunExplorerSearch} user={user} explorerHasActiveFilters={explorerHasActiveFilters} explorerResult={explorerResult} handleCreateCollection={handleCreateCollection} handleClearFilters={handleClearFilters} explorerStatus={explorerStatus} isExplorerLoading={isExplorerLoading} explorerCardsWithSet={explorerCardsWithSet} schedulePrefetchLargeImage={schedulePrefetchLargeImage} openCardModal={openCardModal} buildExplorerQuery={buildExplorerQuery} explorerSort={explorerSort} setExplorerSort={handleExplorerSortChange} explorerActiveFilterChips={explorerActiveFilterChips} handleRemoveExplorerFilter={handleRemoveExplorerFilter} handleApplyExplorerPreset={handleApplyExplorerPreset} hasPendingExplorerChanges={hasPendingExplorerChanges} />}
+        {screen === 'explorer' && <ExplorerScreen navigateTo={navigateTo} explorerFilters={explorerFilters} setExplorerFilters={setExplorerFilters} expansionFilterOptions={expansionFilterOptions} handleRunExplorerSearch={handleRunExplorerSearch} user={user} explorerHasActiveFilters={explorerHasActiveFilters} explorerResult={explorerResult} handleCreateCollection={handleCreateCollection} handleClearFilters={handleClearFilters} explorerStatus={explorerStatus} isExplorerLoading={isExplorerLoading} explorerCardsWithSet={explorerCardsWithSet} schedulePrefetchLargeImage={schedulePrefetchLargeImage} openCardModal={openCardModal} explorerSort={explorerSort} setExplorerSort={setExplorerSort} explorerActiveFilterChips={explorerActiveFilterChips} handleRemoveExplorerFilter={handleRemoveExplorerFilter} handleApplyExplorerPreset={handleApplyExplorerPreset} hasPendingExplorerChanges={hasPendingExplorerChanges} />}
 
         {screen === 'library' && <LibraryScreen setsStatus={isSetsLoading && !sets.length ? 'Cargando expansiones...' : setsStatus} navigateTo={navigateTo} seriesEntries={seriesEntries} filteredSeriesEntries={filteredSeriesEntries} seriesPage={seriesPage} setSeriesPage={setSeriesPage} currentSeriesEntry={currentSeriesEntry} seriesQuery={seriesQuery} setSeriesQuery={setSeriesQuery} />}
 
@@ -517,9 +442,7 @@ export function App() {
           return;
         }
         try {
-          if (activePrompt.onSubmit) {
-            await activePrompt.onSubmit(result);
-          }
+          if (activePrompt.onSubmit) await activePrompt.onSubmit(result);
           setNamePrompt(null);
           activePrompt.resolve?.(result);
         } catch (error) {
@@ -537,16 +460,8 @@ export function App() {
         copy={deletePrompt ? `Se eliminaran ${Number(deletePrompt.collection.cards?.length || 0).toLocaleString()} cartas guardadas y esta accion no se puede deshacer.` : ''}
         confirmLabel="Eliminar coleccion"
         danger
-        onClose={() => {
-          const resolve = deletePrompt?.resolve;
-          setDeletePrompt(null);
-          resolve?.(false);
-        }}
-        onConfirm={() => {
-          const resolve = deletePrompt?.resolve;
-          setDeletePrompt(null);
-          resolve?.(true);
-        }}
+        onClose={() => { const resolve = deletePrompt?.resolve; setDeletePrompt(null); resolve?.(false); }}
+        onConfirm={() => { const resolve = deletePrompt?.resolve; setDeletePrompt(null); resolve?.(true); }}
       >
         {deletePrompt && <div className="detail-fact collection-delete-fact"><span>Coleccion</span><strong id="collection-delete-title"><span id="collection-delete-name">{deletePrompt.collection.name}</span></strong></div>}
       </PromptModal>
@@ -560,16 +475,8 @@ export function App() {
         copy={removePrompt ? `La carta se quitara de la coleccion "${removePrompt.collection.name}" y dejara de contarse en su progreso.` : ''}
         confirmLabel="Quitar carta"
         danger
-        onClose={() => {
-          const resolve = removePrompt?.resolve;
-          setRemovePrompt(null);
-          resolve?.(false);
-        }}
-        onConfirm={() => {
-          const resolve = removePrompt?.resolve;
-          setRemovePrompt(null);
-          resolve?.(true);
-        }}
+        onClose={() => { const resolve = removePrompt?.resolve; setRemovePrompt(null); resolve?.(false); }}
+        onConfirm={() => { const resolve = removePrompt?.resolve; setRemovePrompt(null); resolve?.(true); }}
       >
         {removePrompt && <div className="detail-fact collection-delete-fact"><span>Carta</span><strong id="collection-card-remove-name">{removePrompt.card.name}</strong></div>}
       </PromptModal>

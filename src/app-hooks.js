@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchCardsForSetFromApi, fetchExplorerPageFromApi, fetchSetsFromApi } from './api.js';
 import { cacheRead, cacheWrite, isFresh } from './cache.js';
-import { listCollections } from './collections.js';
+import { addCardToCollection, listCollections } from './collections.js';
 import { CARDS_TTL, SEARCH_TTL, SETS_TTL } from './config.js';
 import { buildExplorerCacheKey } from './app-data.js';
 import { buildRelativeUrl } from './app-routing.js';
-import { hasActiveFilters, parseExplorerQuery } from './app-query.js';
+import { buildExplorerFilterChips, buildExplorerQuery, DEFAULT_EXPLORER_SORT, hasActiveFilters, parseExplorerQuery } from './app-query.js';
+import { collectionCardExists, normalizeCollectionCards } from './app-collections.js';
 
 export function useLocationState() {
   const [location, setLocation] = useState(() => ({
@@ -387,5 +388,155 @@ export function useCardModalControls({ cardsBySet, explorerCards }) {
     handleZoomWheel,
     setModalState,
     setZoom
+  };
+}
+
+export function useExplorerState({ location, navigateTo, expansionFilterOptions }) {
+  const [explorerFilters, setExplorerFilters] = useState(() => parseExplorerQuery(location.search).filters);
+  const [explorerSort, setExplorerSort] = useState(() => parseExplorerQuery(location.search).sort || DEFAULT_EXPLORER_SORT);
+
+  useEffect(() => {
+    const { filters, sort } = parseExplorerQuery(location.search);
+    setExplorerFilters(filters);
+    setExplorerSort(sort || DEFAULT_EXPLORER_SORT);
+  }, [location.search]);
+
+  const appliedExplorerState = useMemo(() => parseExplorerQuery(location.search), [location.search]);
+
+  const hasPendingExplorerChanges = useMemo(() => {
+    const appliedFilters = appliedExplorerState.filters;
+    return explorerSort !== (appliedExplorerState.sort || DEFAULT_EXPLORER_SORT)
+      || explorerFilters.cardQuery !== appliedFilters.cardQuery
+      || explorerFilters.expansion !== appliedFilters.expansion
+      || explorerFilters.artist !== appliedFilters.artist
+      || explorerFilters.cardKind !== appliedFilters.cardKind
+      || explorerFilters.element !== appliedFilters.element
+      || explorerFilters.rarity !== appliedFilters.rarity;
+  }, [appliedExplorerState, explorerFilters, explorerSort]);
+
+  const explorerActiveFilterChips = useMemo(
+    () => buildExplorerFilterChips(explorerFilters, expansionFilterOptions),
+    [explorerFilters, expansionFilterOptions]
+  );
+
+  const handleRunExplorerSearch = useCallback(() => {
+    navigateTo('/explorer', { query: buildExplorerQuery(explorerFilters, 1, explorerSort) });
+  }, [explorerFilters, explorerSort, navigateTo]);
+
+  const handleClearFilters = useCallback(() => {
+    setExplorerFilters({ cardQuery: '', expansion: '', artist: '', cardKind: '', element: '', rarity: '' });
+    setExplorerSort(DEFAULT_EXPLORER_SORT);
+    navigateTo('/explorer', { replace: true });
+  }, [navigateTo]);
+
+  const handleRemoveExplorerFilter = useCallback((key) => {
+    setExplorerFilters((current) => ({ ...current, [key]: '' }));
+  }, []);
+
+  const handleApplyExplorerPreset = useCallback((preset) => {
+    setExplorerFilters({ cardQuery: '', expansion: '', artist: '', cardKind: '', element: '', rarity: '', ...preset });
+  }, []);
+
+  return {
+    explorerFilters,
+    setExplorerFilters,
+    explorerSort,
+    setExplorerSort,
+    explorerHasActiveFilters: hasActiveFilters(explorerFilters),
+    hasPendingExplorerChanges,
+    explorerActiveFilterChips,
+    handleRunExplorerSearch,
+    handleClearFilters,
+    handleRemoveExplorerFilter,
+    handleApplyExplorerPreset,
+  };
+}
+
+export function useModalCollections({ modalCard, user, collections, enrichCard, refreshCollections }) {
+  const [modalCollectionSelection, setModalCollectionSelection] = useState('');
+  const [modalCollectionStatus, setModalCollectionStatus] = useState('');
+  const [modalCollectionsLoading, setModalCollectionsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!modalCard || !user) return;
+    setModalCollectionsLoading(true);
+    setModalCollectionStatus('Cargando tus colecciones...');
+    void refreshCollections(false)
+      .then((nextCollections) => {
+        const preferred = nextCollections.find((collection) => !collectionCardExists(collection, modalCard.id));
+        setModalCollectionSelection(preferred?.id || nextCollections[0]?.id || '');
+        setModalCollectionStatus('');
+      })
+      .catch((error) => {
+        console.error(error);
+        setModalCollectionStatus('No se pudieron cargar tus colecciones ahora mismo.');
+      })
+      .finally(() => setModalCollectionsLoading(false));
+  }, [modalCard, refreshCollections, user]);
+
+  const handleAddModalCardToCollection = useCallback(async () => {
+    if (!modalCard || !modalCollectionSelection) return;
+    const collection = collections.find((entry) => entry.id === modalCollectionSelection);
+    if (!collection || collectionCardExists(collection, modalCard.id)) return;
+    setModalCollectionStatus(`Agregando la carta a "${collection.name}"...`);
+    try {
+      await addCardToCollection(collection.id, normalizeCollectionCards([modalCard], enrichCard)[0]);
+      await refreshCollections(true);
+      setModalCollectionStatus(`Carta agregada a "${collection.name}".`);
+    } catch (error) {
+      if (error?.status === 409) {
+        await refreshCollections(true);
+        setModalCollectionStatus(`La carta ya estaba guardada en "${collection.name}".`);
+        return;
+      }
+      console.error(error);
+      setModalCollectionStatus('No se pudo agregar la carta a esta coleccion.');
+    }
+  }, [collections, enrichCard, modalCard, modalCollectionSelection, refreshCollections]);
+
+  const modalSelectedCollection = collections.find((entry) => entry.id === modalCollectionSelection) || null;
+  const modalCardAlreadyAdded = modalSelectedCollection && modalCard ? collectionCardExists(modalSelectedCollection, modalCard.id) : false;
+  const modalCollectionSubmitLabel = modalCollectionsLoading ? 'Agregando...' : modalCardAlreadyAdded ? 'Ya agregada' : 'Agregar a coleccion';
+
+  return {
+    modalCollectionSelection,
+    setModalCollectionSelection,
+    modalCollectionStatus,
+    modalCollectionsLoading,
+    handleAddModalCardToCollection,
+    modalSelectedCollection,
+    modalCardAlreadyAdded,
+    modalCollectionSubmitLabel,
+  };
+}
+
+export function useCollectionPrompts() {
+  const [namePrompt, setNamePrompt] = useState(null);
+  const [deletePrompt, setDeletePrompt] = useState(null);
+  const [removePrompt, setRemovePrompt] = useState(null);
+
+  const requestCollectionName = useCallback(
+    (config) => new Promise((resolve) => setNamePrompt({ ...config, resolve })),
+    []
+  );
+  const requestCollectionDeletion = useCallback(
+    (collection) => new Promise((resolve) => setDeletePrompt({ collection, resolve })),
+    []
+  );
+  const requestCollectionCardRemoval = useCallback(
+    (collection, card) => new Promise((resolve) => setRemovePrompt({ collection, card, resolve })),
+    []
+  );
+
+  return {
+    namePrompt,
+    setNamePrompt,
+    deletePrompt,
+    setDeletePrompt,
+    removePrompt,
+    setRemovePrompt,
+    requestCollectionName,
+    requestCollectionDeletion,
+    requestCollectionCardRemoval,
   };
 }
